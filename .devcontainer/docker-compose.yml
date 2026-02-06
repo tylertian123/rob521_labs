@@ -1,0 +1,24 @@
+version: "3.8"
+
+services:
+  rob521_labs:
+    image: rob521_labs:${USER}
+    build:
+      context: ..
+      dockerfile: ./Dockerfile
+    stdin_open: true
+    tty: true
+    ipc: host
+    network_mode: host
+    privileged: true
+    environment:
+      DISPLAY: $DISPLAY
+      XAUTHORITY: /home/${USER}/.Xauthority
+      QT_X11_NO_MITSHM: 1
+      QT_GRAPHICSSYSTEM: native
+      TZ: America/Toronto
+    volumes:
+      - ../:/home/rob521/rob521_labs
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    working_dir: /home/rob521/rob521_labs
+    command: /bin/bash

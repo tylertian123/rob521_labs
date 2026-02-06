@@ -1,0 +1,8 @@
+#!/bin/sh
+
+# SIGTERM Gazebo since it takes too long to die
+pkill --signal TERM gzclient
+pkill --signal TERM gzserver
+
+# Ctrl+C to politely request the rest of the code shutdown
+pkill --signal INT roslaunch

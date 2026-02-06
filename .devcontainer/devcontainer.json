@@ -1,0 +1,43 @@
+{
+	"name": "ROB521 Dev Container",
+	"dockerComposeFile": "docker-compose.yml",
+	"service": "rob521_labs",
+	"workspaceFolder": "/home/rob521/rob521_labs",
+	"shutdownAction": "stopCompose",
+	"postStartCommand": "git config --global --add safe.directory '*'",
+	"initializeCommand": "xhost +",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-iot.vscode-ros",
+				"ms-python.python",
+				"ms-python.vscode-pylance",
+				"ms-python.debugpy",
+				"ms-vscode.cmake-tools",
+				"llvm-vs-code-extensions.vscode-clangd",
+				"streetsidesoftware.code-spell-checker",
+				"redhat.vscode-xml"
+			],
+			"settings": {
+				"remote.autoForwardPorts": false,
+				"terminal.integrated.profiles.linux": {
+					"bash": {
+						"path": "/bin/bash",
+						"icon": "terminal-bash"
+					},
+					"fish": {
+						"path": "/usr/bin/fish"
+					}
+				},
+				"terminal.integrated.defaultProfile.linux": "fish",
+				"clangd.path": "/usr/bin/clangd",
+				"clangd.arguments": [
+					"--compile-commands-dir=${workspaceFolder}/build"
+				]
+			}
+		}
+	},
+	"otherPortsAttributes": {
+		"onAutoForward": "ignore"
+	}
+}
