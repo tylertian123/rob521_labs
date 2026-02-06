@@ -41,6 +41,8 @@ class PathPlanner:
         self.occupancy_map = load_map(map_filename)
         self.map_shape = self.occupancy_map.shape
         self.map_settings_dict = load_map_yaml(map_setings_filename)
+        self.origin = self.map_settings_dict["origin"]
+        self.resolution = self.map_settings_dict["resolution"]
 
         #Get the metric bounds of the map
         self.bounds = np.zeros([2,2]) #m
@@ -119,14 +121,28 @@ class PathPlanner:
     def point_to_cell(self, point):
         #Convert a series of [x,y] points in the map to the indices for the corresponding cell in the occupancy map
         #point is a 2 by N matrix of points of interest
-        print("TO DO: Implement a method to get the map cell the robot is currently occupying")
-        return 0
+        x, y, theta = self.origin
+        translated = point - np.array([[x], [y]])
+        # Apply rotation matrix
+        c, s = np.cos(-theta), np.sin(-theta)
+        R = np.array([
+            [c, -s],
+            [s,  c]
+        ])
+        rotated = R @ translated
+        indices = np.round(rotated / self.resolution).astype(int)
+        # Switch x and y, since grid indexing is [row, col]
+        indices[[0, 1]] = indices[[1, 0]]
+        # TODO do we need to flip the y axis here?
+        return indices
 
     def points_to_robot_circle(self, points):
         #Convert a series of [x,y] points to robot map footprints for collision detection
         #Hint: The disk function is included to help you with this function
-        print("TO DO: Implement a method to get the pixel locations of the robot path")
-        return [], []
+        cell_coords = self.point_to_cell(points)
+        radius_cells = self.robot_radius / self.resolution
+        cells = [disk((x, y), radius_cells, shape=self.map_shape) for (x, y) in cell_coords]
+        return np.array(cells)
     #Note: If you have correctly completed all previous functions, then you should be able to create a working RRT function
 
     #RRT* specific functions
