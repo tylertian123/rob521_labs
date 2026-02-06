@@ -123,6 +123,8 @@ class PathPlanner:
         print("TO DO: Implement a way to rollout the controls chosen")
         return np.zeros((3, self.num_substeps))
     
+    # NOTE: this function returns indices in (row, col) order (i.e. (y, x), not (x, y))
+    # It also assumes the y axis points up, which might not be the case for the occupancy grid
     def point_to_cell(self, point):
         #Convert a series of [x,y] points in the map to the indices for the corresponding cell in the occupancy map
         #point is a 2 by N matrix of points of interest
@@ -179,7 +181,8 @@ class PathPlanner:
     def rrt_planning(self):
         #This function performs RRT on the given map and robot
         #You do not need to demonstrate this function to the TAs, but it is left in for you to check your work
-        for i in range(1): #Most likely need more iterations than this to complete the map!
+        # TODO tune this
+        for iter_count in range(1000):
             #Sample map space
             point = self.sample_map_space()
 
@@ -209,10 +212,9 @@ class PathPlanner:
                 continue
             
             if np.hypot(self.goal_point[0, 0] - new_point[0, 0], self.goal_point[1, 0,] - new_point[1, 0]) <= self.stopping_dist:
-                # TODO reached
-                pass
-            #Check if goal has been reached
-            print("TO DO: Check if at goal point.")
+                break
+        else:
+            raise RuntimeError(f"No path found after {iter_count + 1} iterations!")
         return self.nodes
     
     def rrt_star_planning(self):
