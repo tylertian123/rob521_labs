@@ -82,18 +82,23 @@ class PathPlanner:
     #Functions required for RRT
     def sample_map_space(self):
         #Return an [x,y] coordinate to drive the robot towards
-        print("TO DO: Sample point to drive towards")
-        return np.zeros((2, 1))
+        # TODO restrict the sampling to a bounding box within the root node to control expansion
+        point = np.random.random((2, 1))
+        point[0] = (point[0] * (self.bounds[0, 1] - self.bounds[0, 0])) + self.bounds[0, 0]
+        point[1] = (point[1] * (self.bounds[1, 1] - self.bounds[1, 0])) + self.bounds[1, 0]
+        return point
     
     def check_if_duplicate(self, point):
         #Check if point is a duplicate of an already existing node
         print("TO DO: Check that nodes are not duplicates")
+        # TODO: what is this function actually used for?
+        # what qualifies as a duplicate?
+        raise NotImplementedError()
         return False
     
     def closest_node(self, point):
         #Returns the index of the closest node
-        print("TO DO: Implement a method to get the closest node to a sapled point")
-        return 0
+        return min(range(len(self.nodes)), key=lambda i: np.hypot(self.nodes[i].point[0, 0] - point[0, 0], self.nodes[i].point[1, 0] - point[1, 0]))
     
     def simulate_trajectory(self, node_i, point_s):
         #Simulates the non-holonomic motion of the robot.
@@ -142,7 +147,8 @@ class PathPlanner:
         cell_coords = self.point_to_cell(points)
         radius_cells = self.robot_radius / self.resolution
         cells = [disk((x, y), radius_cells, shape=self.map_shape) for (x, y) in cell_coords]
-        return np.array(cells)
+        # Returns an array of 2-array-tuples, first one containing row indices, second one containing column indices
+        return cells
     #Note: If you have correctly completed all previous functions, then you should be able to create a working RRT function
 
     #RRT* specific functions
@@ -184,8 +190,27 @@ class PathPlanner:
             trajectory_o = self.simulate_trajectory(self.nodes[closest_node_id].point, point)
 
             #Check for collisions
-            print("TO DO: Check for collisions and add safe points to list of nodes.")
+            # Strip theta
+            occ_points = self.points_to_robot_circle(trajectory_o[:2])
+            safe_i = -1
+            for i, (occ_rows, occ_cols) in enumerate(occ_points):
+                if np.any(self.occupancy_map[occ_rows, occ_cols]):
+                    safe_i = i - 1
+                    break
+            else:
+                safe_i = len(occ_points) - 1
+
+            if safe_i != -1:
+                # Add the last point that didn't have a collision
+                # No cost considered in RRT
+                new_point = trajectory_o[:, safe_i]
+                self.nodes.append(Node(new_point, closest_node_id, 0))
+            else:
+                continue
             
+            if np.hypot(self.goal_point[0, 0] - new_point[0, 0], self.goal_point[1, 0,] - new_point[1, 0]) <= self.stopping_dist:
+                # TODO reached
+                pass
             #Check if goal has been reached
             print("TO DO: Check if at goal point.")
         return self.nodes
