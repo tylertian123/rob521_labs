@@ -203,12 +203,13 @@ class PathPlanner:
         x, y, theta = self.origin
         translated = point - np.array([[x], [y]])
         # Apply rotation matrix
-        c, s = np.cos(-theta), np.sin(-theta)
-        R = np.array([
-            [c, -s],
-            [s,  c]
-        ])
-        rotated = R @ translated
+        # c, s = np.cos(-theta), np.sin(-theta)
+        # R = np.array([
+        #     [c, -s],
+        #     [s,  c]
+        # ])
+        # rotated = R @ translated
+        rotated = translated
         indices = np.round(rotated / self.resolution).astype(int)
         # Switch x and y, since grid indexing is [row, col]
         indices[[0, 1]] = indices[[1, 0]]
@@ -264,12 +265,35 @@ class PathPlanner:
         return min(self.gamma_RRT * (np.log(card_V) / card_V ) ** (1.0/2.0), self.epsilon)
     
     def connect_node_to_point(self, node_i, point_f):
+        # NOTE: returns None if the connection is not possible within our timestep constraints
         #Given two nodes find the non-holonomic path that connects them
         #Settings
         #node is a 3 by 1 node
         #point is a 2 by 1 point
-        print("TO DO: Implement a way to connect two already existing nodes (for rewiring).")
-        return np.zeros((3, self.num_substeps))
+        dx = point_f[0, 0] - node_i[0, 0]
+        dy = point_f[1, 0] - node_i[1, 0]
+        # Rotate into vehicle frame
+        c, s = np.cos(node_i[2, 0]), np.sin(node_i[2, 0])
+        dxv = dx * c + dy * s
+        dyv = -dx * s + dy * c
+        if abs(dyv) > 1e-8:
+            # Radius of circle
+            r = (dxv**2 + dyv**2) / (2 * dyv)
+            # angle of arc
+            a = 2 * np.arcsin(np.hypot(dxv, dyv) / (2 * r))
+            # Calculate required omega to get there in our time step
+            omega = a / self.timestep
+            if abs(omega) > self.rot_vel_max:
+                return None
+            v = omega * r
+            if abs(v) > self.vel_max:
+                return None
+        else:
+            omega = 0
+            v = dxv / self.timestep
+            if abs(v) > self.vel_max:
+                return None
+        return self.trajectory_rollout(v, omega, node_i)
     
     def cost_to_come(self, trajectory_o):
         #The cost to get to a node from lavalle 
