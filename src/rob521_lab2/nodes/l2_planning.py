@@ -27,6 +27,7 @@ def load_map_yaml(filename):
 #Node for building a graph
 class Node:
     def __init__(self, point, parent_id, cost):
+        assert point.shape == (3, 1), "Wrong shape! Make sure theta is included!"
         self.point = point # A 3 by 1 vector [x, y, theta]
         self.parent_id = parent_id # The parent node id that leads to this node (There should only every be one parent in RRT)
         self.cost = cost # The cost to come to this node
@@ -151,6 +152,28 @@ class PathPlanner:
         cells = [disk((x, y), radius_cells, shape=self.map_shape) for (x, y) in cell_coords]
         # Returns an array of 2-array-tuples, first one containing row indices, second one containing column indices
         return cells
+
+    def collision_check(self, traj) -> int:
+        """
+        Performs collision checking along a path.
+        Returns the index of the last "safe" point within traj.
+        If len(traj) - 1 is returned, the entire trajectory is collision-free.
+        If -1 is returned, none of the points are collision-free.
+        
+        :param traj: 2xN or 3xN array of the trajectory.
+        :return: Index of the collision-free point within the trajectory.
+        """
+        # Strip theta
+        occ_points = self.points_to_robot_circle(traj[:2])
+        safe_i = -1
+        for i, (occ_rows, occ_cols) in enumerate(occ_points):
+            # TODO are True cells occupied or False cells occupied?
+            if np.any(self.occupancy_map[occ_rows, occ_cols]):
+                safe_i = i - 1
+                break
+        else:
+            safe_i = len(occ_points) - 1
+        return safe_i
     #Note: If you have correctly completed all previous functions, then you should be able to create a working RRT function
 
     #RRT* specific functions
@@ -193,24 +216,14 @@ class PathPlanner:
             trajectory_o = self.simulate_trajectory(self.nodes[closest_node_id].point, point)
 
             #Check for collisions
-            # Strip theta
-            occ_points = self.points_to_robot_circle(trajectory_o[:2])
-            safe_i = -1
-            for i, (occ_rows, occ_cols) in enumerate(occ_points):
-                if np.any(self.occupancy_map[occ_rows, occ_cols]):
-                    safe_i = i - 1
-                    break
-            else:
-                safe_i = len(occ_points) - 1
-
-            if safe_i != -1:
-                # Add the last point that didn't have a collision
-                # No cost considered in RRT
-                new_point = trajectory_o[:, safe_i]
-                self.nodes.append(Node(new_point, closest_node_id, 0))
-                self.nodes[closest_node_id].children_ids.append(len(self.nodes) - 1)
-            else:
+            safe_i = self.collision_check(trajectory_o)
+            if safe_i == -1:
                 continue
+            # Add the last point that didn't have a collision
+            # No cost considered in RRT
+            new_point = trajectory_o[:, safe_i]
+            self.nodes.append(Node(new_point, closest_node_id, 0))
+            self.nodes[closest_node_id].children_ids.append(len(self.nodes) - 1)
             
             if np.hypot(self.goal_point[0, 0] - new_point[0, 0], self.goal_point[1, 0,] - new_point[1, 0]) <= self.stopping_dist:
                 break
