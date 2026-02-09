@@ -4,6 +4,7 @@ import numpy as np
 import yaml
 import pygame
 import time
+import tqdm
 import pygame_utils
 import matplotlib.image as mpimg
 from skimage.draw import disk
@@ -63,19 +64,20 @@ class PathPlanner:
 
         #Robot information
         self.robot_radius = 0.22 #m
-        self.vel_max = 0.5 #m/s (Feel free to change!)
-        self.rot_vel_max = 0.2 #rad/s (Feel free to change!)
+        self.vel_max = 1.0 #m/s (Feel free to change!)
+        self.rot_vel_max = 0.4 #rad/s (Feel free to change!)
 
         #Goal Parameters
         self.goal_point = goal_point #m
         self.stopping_dist = stopping_dist #m
 
         #Trajectory Simulation Parameters
-        self.timestep = 0.2 #s
+        self.timestep = 1.0 #s
         self.num_substeps = 10
 
         #Planning storage
         self.nodes = [Node(np.zeros((3,1)), -1, 0)]
+        self.node_pos_np = np.zeros((3, 1))
 
         #RRT* Specific Parameters
         self.lebesgue_free = np.sum(self.occupancy_map) * self.map_settings_dict["resolution"] **2
@@ -116,13 +118,8 @@ class PathPlanner:
     
     def closest_node(self, point):
         #Returns the index of the closest node
-        # return min(range(len(self.nodes)),
-        #            key=lambda i: np.hypot(self.nodes[i].point[0, 0] - point[0, 0],
-        #                                   self.nodes[i].point[1, 0] - point[1, 0]) \
-        #                          + abs(self.angle_to_goal(self.nodes[i].point, point)) / 20)
-        return min(range(len(self.nodes)),
-                   key=lambda i: np.hypot(self.nodes[i].point[0, 0] - point[0, 0],
-                                          self.nodes[i].point[1, 0] - point[1, 0]))
+        # NOTE this requires self.node_pos_np to be properly maintained!
+        return np.argmin(np.sum(np.square(self.node_pos_np[:2, :len(self.nodes)] - point[:2, :]), axis=0))
     
     def simulate_trajectory(self, node_i, point_s):
         #Simulates the non-holonomic motion of the robot.
@@ -151,16 +148,13 @@ class PathPlanner:
         max_threshold = np.pi / 2  # Threshold angle for maximum rotation
         if abs_angle_to_goal > max_threshold:  # If the angle is large, use max rotation
             rot_vel = self.rot_vel_max
-            linear_vel_max = 0
         else:
             rot_vel = self.rot_vel_max * (abs_angle_to_goal / max_threshold)
-            linear_vel_max = self.vel_max * (1 - abs_angle_to_goal / max_threshold)
         rot_vel = rot_vel * np.sign(angle_to_goal)  # Ensure correct direction
 
-        linear_vel = linear_vel_max
-        # # Proportional control for linear velocity
-        # linear_vel = linear_vel_max * distance
-        # linear_vel = min(linear_vel, linear_vel_max)  # Cap at max velocity
+        # Proportional control for linear velocity
+        linear_vel = linear_vel_max * distance
+        linear_vel = min(linear_vel, linear_vel_max)  # Cap at max velocity
 
         return linear_vel, rot_vel
     
@@ -172,7 +166,7 @@ class PathPlanner:
         # preallocated trajectory and steps (x, y, theta)
         startX, startY, startTheta = point.flatten()
         trajectory = np.zeros((3, self.num_substeps))
-        steps = np.linspace(0, 10 * self.timestep, self.num_substeps)
+        steps = np.linspace(0, self.timestep, self.num_substeps)
 
         if rot_vel == 0:  # moving straight
             trajectory[0, :] = startX + vel * steps * np.sin(startTheta)
@@ -239,6 +233,7 @@ class PathPlanner:
     
     def add_node(self, node: Node):
         self.nodes[node.parent_id].children_ids.append(len(self.nodes))
+        self.node_pos_np[:, len(self.nodes)] = node.point.reshape(3,)
         self.nodes.append(node)
         self.tree_bounds[0, 0] = min(self.tree_bounds[0, 0], node.point[0, 0])
         self.tree_bounds[0, 1] = max(self.tree_bounds[0, 1], node.point[0, 0])
@@ -272,14 +267,15 @@ class PathPlanner:
         return
 
     #Planner Functions
-    def rrt_planning(self, max_iter=1000):
+    def rrt_planning(self, max_iter=100000, visualize=True):
         #This function performs RRT on the given map and robot
         #You do not need to demonstrate this function to the TAs, but it is left in for you to check your work
-        # TODO tune this
-        for iter_count in range(max_iter):
+        # Preallocate space for vectorized closest node computation
+        self.node_pos_np = np.zeros((3, max_iter), dtype=np.float32)
+        for iter_count in tqdm.trange(max_iter):
             #Sample map space
             point = self.sample_map_space()
-            self.window.add_point(point.flatten()[:2], radius=1, color=pygame_utils.COLORS['b'])
+            # self.window.add_point(point.flatten()[:2], radius=1, color=pygame_utils.COLORS['b'])
 
             #Get the closest point
             closest_node_id = self.closest_node(point)
@@ -297,9 +293,12 @@ class PathPlanner:
             self.add_node(Node(new_point, closest_node_id, 0))
 
             # pygame visualization
-            for t in range(safe_i):
-                self.window.add_line(trajectory_o[:2, t].flatten(), trajectory_o[:2, t + 1].flatten(), color=(255, 0, 255))
-            self.window.add_se2_pose(new_point.flatten(), length=5, color=(0, 255, 0))
+            if visualize:
+                # for t in range(safe_i):
+                #     self.window.add_line(trajectory_o[:2, t].flatten(), trajectory_o[:2, t + 1].flatten(), color=(255, 0, 255))
+                # self.window.add_se2_pose(new_point.flatten(), length=5, color=(0, 255, 0))
+                self.window.add_line(trajectory_o[:2, 0].flatten(), trajectory_o[:2, safe_i].flatten(), color=(255, 0, 255))
+                self.window.add_point(new_point[:2, 0].flatten(), color=(0, 255, 0))
 
             if np.hypot(self.goal_point[0, 0] - new_point[0, 0], self.goal_point[1, 0] - new_point[1, 0]) <= self.stopping_dist:
                 break
@@ -400,11 +399,12 @@ def main():
     #RRT precursor
     path_planner = PathPlanner(map_filename, map_setings_filename, goal_point, stopping_dist)
     # nodes = path_planner.rrt_star_planning()
-    nodes = path_planner.rrt_planning(max_iter=30000)
+    nodes = path_planner.rrt_planning(max_iter=100000, visualize=True)
     node_path_metric = np.hstack(path_planner.recover_path())
 
     #Leftover test functions
     np.save("shortest_path.npy", node_path_metric)
+    input("Done. Press enter to exit.")
 
 
 if __name__ == '__main__':
