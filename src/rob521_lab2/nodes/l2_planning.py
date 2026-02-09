@@ -205,7 +205,7 @@ class PathPlanner:
         safe_i = -1
         for i, (occ_rows, occ_cols) in enumerate(occ_points):
             # TODO are True cells occupied or False cells occupied?
-            if not np.all(self.occupancy_map[occ_rows, occ_cols]):
+            if not np.any(self.occupancy_map[occ_rows, occ_cols]):
                 safe_i = i - 1
                 break
         else:
@@ -261,6 +261,10 @@ class PathPlanner:
             new_point = trajectory_o[:, safe_i].reshape((3, 1))
             self.nodes.append(Node(new_point, closest_node_id, 0))
             self.nodes[closest_node_id].children_ids.append(len(self.nodes) - 1)
+
+            # pygame visualization
+            self.window.add_point(new_point.flatten()[:2])
+            self.window.add_line(self.nodes[closest_node_id].point.flatten()[:2], new_point.flatten()[:2])
             
             if np.hypot(self.goal_point[0, 0] - new_point[0, 0], self.goal_point[1, 0] - new_point[1, 0]) <= self.stopping_dist:
                 break
