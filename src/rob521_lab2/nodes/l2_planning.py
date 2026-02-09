@@ -69,7 +69,7 @@ class PathPlanner:
         self.stopping_dist = stopping_dist #m
 
         #Trajectory Simulation Parameters
-        self.timestep = 1.0 #s
+        self.timestep = 0.2 #s
         self.num_substeps = 10
 
         #Planning storage
@@ -137,7 +137,7 @@ class PathPlanner:
         rot_vel = rot_vel * np.sign(angle_to_goal)  # Ensure correct direction
 
         # Proportional control for linear velocity
-        linear_vel = self.vel_max * distance
+        linear_vel = self.vel_max * distance / 50
         linear_vel = min(linear_vel, self.vel_max)  # Cap at max velocity
 
         return linear_vel, rot_vel    
@@ -166,7 +166,6 @@ class PathPlanner:
         return trajectory
     
     # NOTE: this function returns indices in (row, col) order (i.e. (y, x), not (x, y))
-    # It also assumes the y axis points up, which might not be the case for the occupancy grid
     def point_to_cell(self, point):
         #Convert a series of [x,y] points in the map to the indices for the corresponding cell in the occupancy map
         #point is a 2 by N matrix of points of interest
@@ -182,7 +181,8 @@ class PathPlanner:
         indices = np.round(rotated / self.resolution).astype(int)
         # Switch x and y, since grid indexing is [row, col]
         indices[[0, 1]] = indices[[1, 0]]
-        # TODO do we need to flip the y axis here?
+        # Invert y axis
+        indices[0] = self.occupancy_map.shape[0] - indices[0]
         return indices
 
     def points_to_robot_circle(self, points):
@@ -248,7 +248,7 @@ class PathPlanner:
         for iter_count in range(max_iter):
             #Sample map space
             point = self.sample_map_space()
-            self.window.add_point(point.flatten()[:2], radius=3, color=pygame_utils.COLORS['b'])
+            # self.window.add_point(point.flatten()[:2], radius=3, color=pygame_utils.COLORS['b'])
 
             #Get the closest point
             closest_node_id = self.closest_node(point)
@@ -359,6 +359,7 @@ class PathPlanner:
         return path
 
 def main():
+    np.random.seed(0)
     #Set map information
     map_filename = "willowgarageworld_05res.png"
     map_setings_filename = "willowgarageworld_05res.yaml"
@@ -370,7 +371,7 @@ def main():
     #RRT precursor
     path_planner = PathPlanner(map_filename, map_setings_filename, goal_point, stopping_dist)
     # nodes = path_planner.rrt_star_planning()
-    nodes = path_planner.rrt_planning(max_iter=3000)
+    nodes = path_planner.rrt_planning(max_iter=30000)
     node_path_metric = np.hstack(path_planner.recover_path())
 
     #Leftover test functions
