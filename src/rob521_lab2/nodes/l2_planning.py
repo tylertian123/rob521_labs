@@ -118,8 +118,8 @@ class PathPlanner:
         #Max velocities should be enforced
         #         
         # NOTE: Opting for simple proportional control. Could do PID if necessary.
-        distance = np.linalg.norm(point_s[:2] - node_i[:2])
-        angle_to_goal = np.arctan2(point_s[1] - node_i[1], point_s[0] - node_i[0])
+        distance = np.linalg.norm(point_s[:2, 0] - node_i[:2, 0])
+        angle_to_goal = np.arctan2(point_s[1, 0] - node_i[1, 0], point_s[0, 0] - node_i[0, 0])
         # normalize angle
         angle_to_goal = (angle_to_goal + np.pi) % (2 * np.pi) - np.pi
         
@@ -258,17 +258,11 @@ class PathPlanner:
                 continue
             # Add the last point that didn't have a collision
             # No cost considered in RRT
-            new_point = trajectory_o[:, safe_i]
+            new_point = trajectory_o[:, safe_i].reshape((3, 1))
             self.nodes.append(Node(new_point, closest_node_id, 0))
             self.nodes[closest_node_id].children_ids.append(len(self.nodes) - 1)
-
-            # Visualization
-            self.window.add_se2_pose(self.nodes[-1].point.ravel(), length=5, color=(0, 0, 255))
-            self.window.add_point(point.ravel(), radius=2, color=(127, 127, 0))
             
-            if np.hypot(self.goal_point[0, 0] - self.nodes[-1].point[0, 0],
-                        self.goal_point[1, 0] - self.nodes[-1].point[1, 0]) <= self.stopping_dist:
-                print(f"Path found after {iter_count + 1} iterations")
+            if np.hypot(self.goal_point[0, 0] - new_point[0, 0], self.goal_point[1, 0] - new_point[1, 0]) <= self.stopping_dist:
                 break
         else:
             raise RuntimeError(f"No path found after {iter_count + 1} iterations!")
