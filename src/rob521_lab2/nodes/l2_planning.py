@@ -225,15 +225,16 @@ class PathPlanner:
             self.nodes.append(Node(new_point, closest_node_id, 0))
             self.nodes[closest_node_id].children_ids.append(len(self.nodes) - 1)
             
-            if np.hypot(self.goal_point[0, 0] - new_point[0, 0], self.goal_point[1, 0,] - new_point[1, 0]) <= self.stopping_dist:
+            if np.hypot(self.goal_point[0, 0] - new_point[0, 0], self.goal_point[1, 0] - new_point[1, 0]) <= self.stopping_dist:
                 break
         else:
             raise RuntimeError(f"No path found after {iter_count + 1} iterations!")
         return self.nodes
     
     def rrt_star_planning(self):
-        #This function performs RRT* for the given map and robot        
-        for i in range(1): #Most likely need more iterations than this to complete the map!
+        #This function performs RRT* for the given map and robot
+        # TODO tune this
+        for iter_count in range(1000):
             #Sample
             point = self.sample_map_space()
 
@@ -243,17 +244,60 @@ class PathPlanner:
             #Simulate trajectory
             trajectory_o = self.simulate_trajectory(self.nodes[closest_node_id].point, point)
 
-            #Check for Collision
-            print("TO DO: Check for collision.")
+            #Check for collisions
+            safe_i = self.collision_check(trajectory_o)
 
-            #Last node rewire
-            print("TO DO: Last node rewiring")
+            # Add the last point that didn't have a collision
+            best_point = trajectory_o[:, safe_i]
+            # Find optimal parent in neighbourhood
+            new_xy = best_point[:2] # Cut off theta for this one
+            best_parent = closest_node_id
+            # Tentative best cost, calculate using clipped path
+            best_cost = self.nodes[closest_node_id].cost + self.cost_to_come(trajectory_o[:, :safe_i + 1])
+            # Find everything within the radius
+            r = self.ball_radius()
+            lengths = np.array([np.hypot(new_xy[0, 0] - n.point[0, 0], new_xy[1, 0] - n.point[1, 0]) for n in self.nodes])
+            indices = lengths >= r
+            for i in indices:
+                if i == closest_node_id:
+                    continue
+                traj = self.connect_node_to_point(self.nodes[i].point, new_xy)
+                # Collision check to make sure the entire trajectory is collision-free
+                if self.collision_check(traj) != len(traj) - 1:
+                    continue
+                edge_cost = self.cost_to_come(traj)
+                if self.nodes[i].cost + edge_cost < best_cost:
+                    best_cost = self.nodes[i].cost + edge_cost
+                    best_parent = i
+                    best_point = traj[-1]
+            # Wire to optimal parent
+            self.nodes.append(Node(best_point, best_parent, best_cost))
+            self.nodes[best_parent].children_ids.append(len(self.nodes) - 1)
 
             #Close node rewire
-            print("TO DO: Near point rewiring")
+            for i in indices:
+                if i == closest_node_id:
+                    continue
+                # Collision check
+                traj = self.connect_node_to_point(self.nodes[-1].point, self.nodes[i].point[:2])
+                if self.collision_check(traj) != len(traj) - 1:
+                    continue
+                edge_cost = self.cost_to_come(traj)
+                # Rewire
+                if self.nodes[-1].cost + edge_cost < self.nodes[i].cost:
+                    old_parent = self.nodes[i].parent_id
+                    self.nodes[old_parent].children_ids.remove(i)
+                    self.nodes[i].parent_id = len(self.nodes) - 1
+                    self.nodes[-1].children_ids.append(i)
+                    # Magically propagate cost?
+                    self.update_children(i)
 
-            #Check for early end
-            print("TO DO: Check for early end")
+
+            if np.hypot(self.goal_point[0, 0] - self.nodes[-1].point[0, 0],
+                        self.goal_point[1, 0] - self.nodes[-1].point[1, 0]) <= self.stopping_dist:
+                break
+        else:
+            raise RuntimeError(f"No path found after {iter_count + 1} iterations!")
         return self.nodes
     
     def recover_path(self, node_id = -1):
