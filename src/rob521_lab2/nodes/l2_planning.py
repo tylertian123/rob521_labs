@@ -58,6 +58,8 @@ class PathPlanner:
         self.bounds[1, 0] = self.map_settings_dict["origin"][1]
         self.bounds[0, 1] = self.map_settings_dict["origin"][0] + self.map_shape[1] * self.map_settings_dict["resolution"]
         self.bounds[1, 1] = self.map_settings_dict["origin"][1] + self.map_shape[0] * self.map_settings_dict["resolution"]
+        
+        self.tree_bounds = np.zeros((2, 2))
 
         #Robot information
         self.robot_radius = 0.22 #m
@@ -90,13 +92,18 @@ class PathPlanner:
     #Functions required for RRT
     def sample_map_space(self):
         #Return an [x,y] coordinate to drive the robot towards
-        # TODO restrict the sampling to a bounding box within the root node to control expansion
         # With 5% probability just go directly to the goal point
         if np.random.rand() < 0.05:
             return self.goal_point
+        # Sample within a box around the current extent of the tree to balance exploration and refinement
+        radius = 5
+        xmin = max(self.bounds[0, 0], self.tree_bounds[0, 0] - radius)
+        xmax = min(self.bounds[0, 1], self.tree_bounds[0, 1] + radius)
+        ymin = max(self.bounds[1, 0], self.tree_bounds[1, 0] - radius)
+        ymax = min(self.bounds[1, 1], self.tree_bounds[1, 1] + radius)
         point = np.random.random((2, 1))
-        point[0] = (point[0] * (self.bounds[0, 1] - self.bounds[0, 0])) + self.bounds[0, 0]
-        point[1] = (point[1] * (self.bounds[1, 1] - self.bounds[1, 0])) + self.bounds[1, 0]
+        point[0] = (point[0] * (xmax - xmin)) + xmin
+        point[1] = (point[1] * (ymax - ymin)) + ymin
         return point
     
     def check_if_duplicate(self, point):
@@ -140,7 +147,7 @@ class PathPlanner:
         rot_vel = rot_vel * np.sign(angle_to_goal)  # Ensure correct direction
 
         # Proportional control for linear velocity
-        linear_vel = self.vel_max * distance / 50
+        linear_vel = self.vel_max * distance / 20
         linear_vel = min(linear_vel, self.vel_max)  # Cap at max velocity
 
         return linear_vel, rot_vel    
@@ -217,6 +224,15 @@ class PathPlanner:
         else:
             safe_i = len(occ_points) - 1
         return safe_i
+    
+    def add_node(self, node: Node):
+        self.nodes[node.parent_id].children_ids.append(len(self.nodes))
+        self.nodes.append(node)
+        self.tree_bounds[0, 0] = min(self.tree_bounds[0, 0], node.point[0, 0])
+        self.tree_bounds[0, 1] = max(self.tree_bounds[0, 1], node.point[0, 0])
+        self.tree_bounds[1, 0] = min(self.tree_bounds[1, 0], node.point[1, 0])
+        self.tree_bounds[1, 1] = max(self.tree_bounds[1, 1], node.point[1, 0])
+
     #Note: If you have correctly completed all previous functions, then you should be able to create a working RRT function
 
     #RRT* specific functions
@@ -266,8 +282,7 @@ class PathPlanner:
             # Add the last point that didn't have a collision
             # No cost considered in RRT
             new_point = trajectory_o[:, safe_i].reshape((3, 1))
-            self.nodes.append(Node(new_point, closest_node_id, 0))
-            self.nodes[closest_node_id].children_ids.append(len(self.nodes) - 1)
+            self.add_node(Node(new_point, closest_node_id, 0))
 
             # pygame visualization
             for t in range(safe_i):
@@ -320,8 +335,7 @@ class PathPlanner:
                     best_parent = i
                     best_point = traj[-1]
             # Wire to optimal parent
-            self.nodes.append(Node(best_point, best_parent, best_cost))
-            self.nodes[best_parent].children_ids.append(len(self.nodes) - 1)
+            self.add_node(Node(best_point, best_parent, best_cost))
 
             #Close node rewire
             for i in indices:
