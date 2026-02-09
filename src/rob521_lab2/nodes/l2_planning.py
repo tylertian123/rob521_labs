@@ -264,6 +264,10 @@ class PathPlanner:
         card_V = len(self.nodes)
         return min(self.gamma_RRT * (np.log(card_V) / card_V ) ** (1.0/2.0), self.epsilon)
     
+    def nodes_within_radius(self, point, r):
+        dist = np.sum(np.square(self.node_pos_np[:2, :len(self.nodes)] - point[:2, :]), axis=0)
+        return dist <= r**2
+    
     def connect_node_to_point(self, node_i, point_f):
         # NOTE: returns None if the connection is not possible within our timestep constraints
         #Given two nodes find the non-holonomic path that connects them
@@ -348,10 +352,11 @@ class PathPlanner:
             raise RuntimeError(f"No path found after {iter_count + 1} iterations!")
         return self.nodes
     
-    def rrt_star_planning(self):
+    def rrt_star_planning(self, max_iter=150000, visualize=True):
         #This function performs RRT* for the given map and robot
-        # TODO tune this
-        for iter_count in range(1000):
+        # Preallocate space for vectorized closest node computation
+        self.node_pos_np = np.zeros((3, max_iter), dtype=np.float32)
+        for iter_count in tqdm.trange(max_iter):
             #Sample
             point = self.sample_map_space()
 
@@ -372,15 +377,13 @@ class PathPlanner:
             # Tentative best cost, calculate using clipped path
             best_cost = self.nodes[closest_node_id].cost + self.cost_to_come(trajectory_o[:, :safe_i + 1])
             # Find everything within the radius
-            r = self.ball_radius()
-            lengths = np.array([np.hypot(new_xy[0, 0] - n.point[0, 0], new_xy[1, 0] - n.point[1, 0]) for n in self.nodes])
-            indices = lengths >= r
+            indices = self.nodes_within_radius(new_xy, self.ball_radius())
             for i in indices:
                 if i == closest_node_id:
                     continue
                 traj = self.connect_node_to_point(self.nodes[i].point, new_xy)
                 # Collision check to make sure the entire trajectory is collision-free
-                if self.collision_check(traj) != len(traj) - 1:
+                if traj is None or self.collision_check(traj) != len(traj) - 1:
                     continue
                 edge_cost = self.cost_to_come(traj)
                 if self.nodes[i].cost + edge_cost < best_cost:
@@ -396,15 +399,15 @@ class PathPlanner:
                     continue
                 # Collision check
                 traj = self.connect_node_to_point(self.nodes[-1].point, self.nodes[i].point[:2])
-                if self.collision_check(traj) != len(traj) - 1:
+                if traj is None or self.collision_check(traj) != len(traj) - 1:
                     continue
                 edge_cost = self.cost_to_come(traj)
                 # Rewire
                 if self.nodes[-1].cost + edge_cost < self.nodes[i].cost:
                     old_parent = self.nodes[i].parent_id
                     self.nodes[old_parent].children_ids.remove(i)
-                    self.nodes[i].parent_id = len(self.nodes) - 1
                     self.nodes[-1].children_ids.append(i)
+                    self.nodes[i].parent_id = len(self.nodes) - 1
                     self.nodes[i].cost = self.nodes[-1].cost + edge_cost
                     self.nodes[i].point = traj[-1]
                     # Magically propagate cost?
