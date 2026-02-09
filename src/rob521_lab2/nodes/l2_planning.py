@@ -9,9 +9,13 @@ import matplotlib.image as mpimg
 from skimage.draw import disk
 from scipy.linalg import block_diag
 
+from pathlib import Path
+
+MAPS_DIR = Path(__file__).absolute().parent.parent / "maps"
+
 
 def load_map(filename):
-    im = mpimg.imread("../maps/" + filename)
+    im = mpimg.imread(str(MAPS_DIR / filename))
     if len(im.shape) > 2:
         im = im[:,:,0]
     im_np = np.array(im)  #Whitespace is true, black is false
@@ -20,7 +24,7 @@ def load_map(filename):
 
 
 def load_map_yaml(filename):
-    with open("../maps/" + filename, "r") as stream:
+    with open(str(MAPS_DIR / filename), "r") as stream:
             map_settings_dict = yaml.safe_load(stream)
     return map_settings_dict
 
@@ -119,7 +123,7 @@ class PathPlanner:
         #         
         # NOTE: Opting for simple proportional control. Could do PID if necessary.
         distance = np.linalg.norm(point_s[:2, 0] - node_i[:2, 0])
-        angle_to_goal = np.arctan2(point_s[1, 0] - node_i[1, 0], point_s[0, 0] - node_i[0, 0])
+        angle_to_goal = np.arctan2(point_s[1, 0] - node_i[1, 0], point_s[0, 0] - node_i[0, 0]) - node_i[2, 0]
         # normalize angle
         angle_to_goal = (angle_to_goal + np.pi) % (2 * np.pi) - np.pi
         abs_angle_to_goal = np.abs(angle_to_goal)
@@ -156,7 +160,7 @@ class PathPlanner:
             radius = vel / rot_vel
             trajectory[0, :] = startX + radius * (np.sin(startTheta + rot_vel * steps) - np.sin(startTheta))
             ## NOTE: MAYBE THE SIGN IS WRONG FOR Y? CHECK WHEN TESTING
-            trajectory[1, :] = startY + radius * (np.cos(startTheta + rot_vel * steps) - np.cos(startTheta))
+            trajectory[1, :] = startY - radius * (np.cos(startTheta + rot_vel * steps) - np.cos(startTheta))
             trajectory[2, :] = startTheta + rot_vel * steps
 
         return trajectory
@@ -204,7 +208,6 @@ class PathPlanner:
         occ_points = self.points_to_robot_circle(traj[:2, :])
         safe_i = -1
         for i, (occ_rows, occ_cols) in enumerate(occ_points):
-            # TODO are True cells occupied or False cells occupied?
             if not np.all(self.occupancy_map[occ_rows, occ_cols]):
                 safe_i = i - 1
                 break
@@ -252,14 +255,11 @@ class PathPlanner:
 
             #Simulate driving the robot towards the closest point
             trajectory_o = self.simulate_trajectory(self.nodes[closest_node_id].point, point)
-            for t in range(trajectory_o.shape[1]):
-                self.window.add_point(trajectory_o[:2, t], radius=1, color=pygame_utils.COLORS['g'])
 
             #Check for collisions
             safe_i = self.collision_check(trajectory_o)
             if safe_i == -1:
                 continue
-            print('safe_i', safe_i)
             # Add the last point that didn't have a collision
             # No cost considered in RRT
             new_point = trajectory_o[:, safe_i].reshape((3, 1))
@@ -267,9 +267,10 @@ class PathPlanner:
             self.nodes[closest_node_id].children_ids.append(len(self.nodes) - 1)
 
             # pygame visualization
-            self.window.add_point(new_point.flatten()[:2])
-            self.window.add_line(self.nodes[closest_node_id].point.flatten()[:2], new_point.flatten()[:2])
-            
+            for t in range(safe_i):
+                self.window.add_line(trajectory_o[:2, t].flatten(), trajectory_o[:2, t + 1].flatten(), color=(255, 0, 255))
+            self.window.add_se2_pose(new_point.flatten(), length=5, color=(0, 255, 0))
+
             if np.hypot(self.goal_point[0, 0] - new_point[0, 0], self.goal_point[1, 0] - new_point[1, 0]) <= self.stopping_dist:
                 break
         else:

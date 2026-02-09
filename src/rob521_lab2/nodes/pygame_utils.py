@@ -2,6 +2,10 @@ import numpy as np
 import pygame
 # from pygame.locals import *
 
+from pathlib import Path
+
+MAPS_DIR = Path(__file__).parent.parent / "maps"
+
 COLORS = dict(
     w = (255, 255, 255),
     k = (0, 0, 0),
@@ -27,7 +31,7 @@ class PygameWindow:
         self.map_settings_dict = map_settings_dict
         self.origin = np.array(map_settings_dict['origin'])
 
-        map_img = pygame.image.load('../maps/willowgarageworld_05res.png')
+        map_img = pygame.image.load(str(MAPS_DIR / 'willowgarageworld_05res.png'))
         map_img = pygame.transform.scale(map_img, self.size)
 
         self.screen = pygame.display.set_mode(self.size)
