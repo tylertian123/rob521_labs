@@ -91,6 +91,9 @@ class PathPlanner:
     def sample_map_space(self):
         #Return an [x,y] coordinate to drive the robot towards
         # TODO restrict the sampling to a bounding box within the root node to control expansion
+        # With 5% probability just go directly to the goal point
+        if np.random.rand() < 0.05:
+            return self.goal_point
         point = np.random.random((2, 1))
         point[0] = (point[0] * (self.bounds[0, 1] - self.bounds[0, 0])) + self.bounds[0, 0]
         point[1] = (point[1] * (self.bounds[1, 1] - self.bounds[1, 0])) + self.bounds[1, 0]
