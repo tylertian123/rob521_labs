@@ -208,6 +208,7 @@ class PathPlanner:
                 # No cost considered in RRT
                 new_point = trajectory_o[:, safe_i]
                 self.nodes.append(Node(new_point, closest_node_id, 0))
+                self.nodes[closest_node_id].children_ids.append(len(self.nodes) - 1)
             else:
                 continue
             
