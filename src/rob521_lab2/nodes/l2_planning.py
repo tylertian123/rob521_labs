@@ -55,16 +55,27 @@ class PathPlanner:
 
         #Get the metric bounds of the map
         self.bounds = np.zeros([2,2]) #m
-        self.bounds[0, 0] = self.map_settings_dict["origin"][0]
-        self.bounds[1, 0] = self.map_settings_dict["origin"][1]
-        self.bounds[0, 1] = self.map_settings_dict["origin"][0] + self.map_shape[1] * self.map_settings_dict["resolution"]
-        self.bounds[1, 1] = self.map_settings_dict["origin"][1] + self.map_shape[0] * self.map_settings_dict["resolution"]
+        # self.bounds[0, 0] = self.map_settings_dict["origin"][0]
+        # self.bounds[1, 0] = self.map_settings_dict["origin"][1]
+        # self.bounds[0, 1] = self.map_settings_dict["origin"][0] + self.map_shape[1] * self.map_settings_dict["resolution"]
+        # self.bounds[1, 1] = self.map_settings_dict["origin"][1] + self.map_shape[0] * self.map_settings_dict["resolution"]
+        # Constrain sampling to only within the nonempty areas of the map
+        r, c = np.nonzero(self.occupancy_map < self.map_settings_dict["occupied_thresh"])
+        min_row = np.min(r)
+        min_col = np.min(c)
+        max_row = np.max(r)
+        max_col = np.max(c)
+        
+        self.bounds[0, 0] = self.origin[0] + min_col * self.resolution
+        self.bounds[0, 1] = self.origin[0] + max_col * self.resolution
+        self.bounds[1, 0] = self.origin[1] + (self.map_shape[0] - max_row) * self.resolution
+        self.bounds[1, 1] = self.origin[1] + (self.map_shape[0] - min_row) * self.resolution
         
         self.tree_bounds = np.zeros((2, 2))
 
         #Robot information
         self.robot_radius = 0.22 #m
-        self.vel_max = 1.0 #m/s (Feel free to change!)
+        self.vel_max = 0.5 #m/s (Feel free to change!)
         self.rot_vel_max = 0.4 #rad/s (Feel free to change!)
 
         #Goal Parameters
@@ -94,15 +105,19 @@ class PathPlanner:
     #Functions required for RRT
     def sample_map_space(self):
         #Return an [x,y] coordinate to drive the robot towards
-        # With 5% probability just go directly to the goal point
-        if np.random.rand() < 0.05:
-            return self.goal_point
-        # Sample within a box around the current extent of the tree to balance exploration and refinement
         radius = 5
-        xmin = max(self.bounds[0, 0], self.tree_bounds[0, 0] - radius)
-        xmax = min(self.bounds[0, 1], self.tree_bounds[0, 1] + radius)
-        ymin = max(self.bounds[1, 0], self.tree_bounds[1, 0] - radius)
-        ymax = min(self.bounds[1, 1], self.tree_bounds[1, 1] + radius)
+        # With 10% probability, sample around the goal point
+        if np.random.rand() < 0.1:
+            xmin = self.goal_point[0, 0] - radius
+            xmax = self.goal_point[0, 0] + radius
+            ymin = self.goal_point[1, 0] - radius
+            ymax = self.goal_point[1, 0] + radius
+        else:
+            # Sample within a box around the current extent of the tree to balance exploration and refinement
+            xmin = max(self.bounds[0, 0], self.tree_bounds[0, 0] - radius)
+            xmax = min(self.bounds[0, 1], self.tree_bounds[0, 1] + radius)
+            ymin = max(self.bounds[1, 0], self.tree_bounds[1, 0] - radius)
+            ymax = min(self.bounds[1, 1], self.tree_bounds[1, 1] + radius)
         point = np.random.random((2, 1))
         point[0] = (point[0] * (xmax - xmin)) + xmin
         point[1] = (point[1] * (ymax - ymin)) + ymin
@@ -267,7 +282,7 @@ class PathPlanner:
         return
 
     #Planner Functions
-    def rrt_planning(self, max_iter=100000, visualize=True):
+    def rrt_planning(self, max_iter=150000, visualize=True):
         #This function performs RRT on the given map and robot
         #You do not need to demonstrate this function to the TAs, but it is left in for you to check your work
         # Preallocate space for vectorized closest node computation
@@ -399,7 +414,7 @@ def main():
     #RRT precursor
     path_planner = PathPlanner(map_filename, map_setings_filename, goal_point, stopping_dist)
     # nodes = path_planner.rrt_star_planning()
-    nodes = path_planner.rrt_planning(max_iter=100000, visualize=True)
+    nodes = path_planner.rrt_planning(max_iter=150000, visualize=True)
     node_path_metric = np.hstack(path_planner.recover_path())
 
     #Leftover test functions
