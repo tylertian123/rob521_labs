@@ -297,8 +297,11 @@ class PathPlanner:
     
     def cost_to_come(self, trajectory_o):
         #The cost to get to a node from lavalle 
-        print("TO DO: Implement a cost to come metric")
-        return 0
+        # Sum Euclidean distance between nodes
+        diffs = np.diff(trajectory_o[:2], axis=1)
+        dist = np.sum(np.sqrt(np.sum(diffs**2, axis=0)))
+        # Use path length as cost (TODO find a better metric?)
+        return dist
     
     def update_children(self, node_id):
         #Given a node_id with a changed cost, update all connected nodes with the new cost
