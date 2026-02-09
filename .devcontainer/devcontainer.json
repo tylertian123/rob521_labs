@@ -5,7 +5,7 @@
 	"workspaceFolder": "/home/rob521/rob521_labs",
 	"shutdownAction": "stopCompose",
 	"postStartCommand": "git config --global --add safe.directory '*'",
-	"initializeCommand": "xhost +",
+	// "initializeCommand": "xhost +",
 	"customizations": {
 		"vscode": {
 			"extensions": [

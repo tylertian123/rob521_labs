@@ -39,6 +39,7 @@ RUN apt install -y ros-noetic-joy ros-noetic-teleop-twist-joy \
     ros-noetic-rviz ros-noetic-gmapping \
     ros-noetic-navigation ros-noetic-interactive-markers \
     ros-noetic-dynamixel-sdk ros-noetic-turtlebot3-msgs ros-noetic-turtlebot3
+RUN python3 -m pip install --upgrade scikit-image pygame tqdm
 
 # Get a temp copy of the repo to use rosdep to install all deps
 COPY . ./repo_deps_tmp
