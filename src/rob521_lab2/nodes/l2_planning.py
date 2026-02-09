@@ -122,14 +122,14 @@ class PathPlanner:
         angle_to_goal = np.arctan2(point_s[1, 0] - node_i[1, 0], point_s[0, 0] - node_i[0, 0])
         # normalize angle
         angle_to_goal = (angle_to_goal + np.pi) % (2 * np.pi) - np.pi
+        abs_angle_to_goal = np.abs(angle_to_goal)
         
         # Proportional control for angular velocity
-        max_threshold = np.pi / 4  # Threshold angle for maximum rotation
-        if np.abs(angle_to_goal) > max_threshold:  # If the angle is large, use max rotation
+        max_threshold = np.pi / 2  # Threshold angle for maximum rotation
+        if abs_angle_to_goal > max_threshold:  # If the angle is large, use max rotation
             rot_vel = self.rot_vel_max
         else:
-            rot_vel = self.rot_vel_max * (angle_to_goal / max_threshold)
-        rot_vel = min(rot_vel, self.rot_vel_max)  # Cap at max rotation velocity
+            rot_vel = self.rot_vel_max * (abs_angle_to_goal / max_threshold)
         rot_vel = rot_vel * np.sign(angle_to_goal)  # Ensure correct direction
 
         # Proportional control for linear velocity
@@ -146,17 +146,17 @@ class PathPlanner:
         # preallocated trajectory and steps (x, y, theta)
         startX, startY, startTheta = point.flatten()
         trajectory = np.zeros((3, self.num_substeps))
-        steps = np.linspace(0, self.timestep, self.num_substeps)
+        steps = np.linspace(0, 10 * self.timestep, self.num_substeps)
 
         if rot_vel == 0:  # moving straight
-            trajectory[0, :] = startX + vel * steps * np.cos(startTheta)
-            trajectory[1, :] = startY + vel * steps * np.sin(startTheta)
+            trajectory[0, :] = startX + vel * steps * np.sin(startTheta)
+            trajectory[1, :] = startY + vel * steps * np.cos(startTheta)
             trajectory[2, :] = startTheta * np.ones(self.num_substeps)
         else:  # moving along a curve
             radius = vel / rot_vel
-            trajectory[0, :] = startX + radius * (np.cos(startTheta + rot_vel * steps) - np.cos(startTheta))
+            trajectory[0, :] = startX + radius * (np.sin(startTheta + rot_vel * steps) - np.sin(startTheta))
             ## NOTE: MAYBE THE SIGN IS WRONG FOR Y? CHECK WHEN TESTING
-            trajectory[1, :] = startY + radius * (np.sin(startTheta + rot_vel * steps) - np.sin(startTheta))
+            trajectory[1, :] = startY + radius * (np.cos(startTheta + rot_vel * steps) - np.cos(startTheta))
             trajectory[2, :] = startTheta + rot_vel * steps
 
         return trajectory
@@ -201,11 +201,11 @@ class PathPlanner:
         :return: Index of the collision-free point within the trajectory.
         """
         # Strip theta
-        occ_points = self.points_to_robot_circle(traj[:2])
+        occ_points = self.points_to_robot_circle(traj[:2, :])
         safe_i = -1
         for i, (occ_rows, occ_cols) in enumerate(occ_points):
             # TODO are True cells occupied or False cells occupied?
-            if not np.any(self.occupancy_map[occ_rows, occ_cols]):
+            if not np.all(self.occupancy_map[occ_rows, occ_cols]):
                 safe_i = i - 1
                 break
         else:
@@ -245,17 +245,21 @@ class PathPlanner:
         for iter_count in range(max_iter):
             #Sample map space
             point = self.sample_map_space()
+            self.window.add_point(point.flatten()[:2], radius=3, color=pygame_utils.COLORS['b'])
 
             #Get the closest point
             closest_node_id = self.closest_node(point)
 
             #Simulate driving the robot towards the closest point
             trajectory_o = self.simulate_trajectory(self.nodes[closest_node_id].point, point)
+            for t in range(trajectory_o.shape[1]):
+                self.window.add_point(trajectory_o[:2, t], radius=1, color=pygame_utils.COLORS['g'])
 
             #Check for collisions
             safe_i = self.collision_check(trajectory_o)
             if safe_i == -1:
                 continue
+            print('safe_i', safe_i)
             # Add the last point that didn't have a collision
             # No cost considered in RRT
             new_point = trajectory_o[:, safe_i].reshape((3, 1))
