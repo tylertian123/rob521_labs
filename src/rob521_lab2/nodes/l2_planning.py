@@ -289,6 +289,8 @@ class PathPlanner:
                     self.nodes[old_parent].children_ids.remove(i)
                     self.nodes[i].parent_id = len(self.nodes) - 1
                     self.nodes[-1].children_ids.append(i)
+                    self.nodes[i].cost = self.nodes[-1].cost + edge_cost
+                    self.nodes[i].point = traj[-1]
                     # Magically propagate cost?
                     self.update_children(i)
 
