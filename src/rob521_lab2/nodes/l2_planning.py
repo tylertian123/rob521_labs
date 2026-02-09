@@ -116,7 +116,13 @@ class PathPlanner:
     
     def closest_node(self, point):
         #Returns the index of the closest node
-        return min(range(len(self.nodes)), key=lambda i: np.hypot(self.nodes[i].point[0, 0] - point[0, 0], self.nodes[i].point[1, 0] - point[1, 0]))
+        # return min(range(len(self.nodes)),
+        #            key=lambda i: np.hypot(self.nodes[i].point[0, 0] - point[0, 0],
+        #                                   self.nodes[i].point[1, 0] - point[1, 0]) \
+        #                          + abs(self.angle_to_goal(self.nodes[i].point, point)) / 20)
+        return min(range(len(self.nodes)),
+                   key=lambda i: np.hypot(self.nodes[i].point[0, 0] - point[0, 0],
+                                          self.nodes[i].point[1, 0] - point[1, 0]))
     
     def simulate_trajectory(self, node_i, point_s):
         #Simulates the non-holonomic motion of the robot.
@@ -127,30 +133,36 @@ class PathPlanner:
         robot_traj = self.trajectory_rollout(vel, rot_vel, node_i)
         return robot_traj
     
+    def angle_to_goal(self, node, point):
+        angle = np.arctan2(point[1, 0] - node[1, 0], point[0, 0] - node[0, 0]) - node[2, 0]
+        return (angle + np.pi) % (2 * np.pi) - np.pi
+    
     def robot_controller(self, node_i, point_s):
         #This controller determines the velocities that will nominally move the robot from node i to node s
         #Max velocities should be enforced
         #         
         # NOTE: Opting for simple proportional control. Could do PID if necessary.
         distance = np.linalg.norm(point_s[:2, 0] - node_i[:2, 0])
-        angle_to_goal = np.arctan2(point_s[1, 0] - node_i[1, 0], point_s[0, 0] - node_i[0, 0]) - node_i[2, 0]
-        # normalize angle
-        angle_to_goal = (angle_to_goal + np.pi) % (2 * np.pi) - np.pi
+        angle_to_goal = self.angle_to_goal(node_i, point_s)
         abs_angle_to_goal = np.abs(angle_to_goal)
         
+        linear_vel_max = self.vel_max
         # Proportional control for angular velocity
         max_threshold = np.pi / 2  # Threshold angle for maximum rotation
         if abs_angle_to_goal > max_threshold:  # If the angle is large, use max rotation
             rot_vel = self.rot_vel_max
+            linear_vel_max = 0
         else:
             rot_vel = self.rot_vel_max * (abs_angle_to_goal / max_threshold)
+            linear_vel_max = self.vel_max * (1 - abs_angle_to_goal / max_threshold)
         rot_vel = rot_vel * np.sign(angle_to_goal)  # Ensure correct direction
 
-        # Proportional control for linear velocity
-        linear_vel = self.vel_max * distance / 20
-        linear_vel = min(linear_vel, self.vel_max)  # Cap at max velocity
+        linear_vel = linear_vel_max
+        # # Proportional control for linear velocity
+        # linear_vel = linear_vel_max * distance
+        # linear_vel = min(linear_vel, linear_vel_max)  # Cap at max velocity
 
-        return linear_vel, rot_vel    
+        return linear_vel, rot_vel
     
     def trajectory_rollout(self, vel, rot_vel, point):
         # Given your chosen velocities determine the trajectory of the robot for your given timestep
@@ -267,7 +279,7 @@ class PathPlanner:
         for iter_count in range(max_iter):
             #Sample map space
             point = self.sample_map_space()
-            # self.window.add_point(point.flatten()[:2], radius=3, color=pygame_utils.COLORS['b'])
+            self.window.add_point(point.flatten()[:2], radius=1, color=pygame_utils.COLORS['b'])
 
             #Get the closest point
             closest_node_id = self.closest_node(point)
@@ -277,7 +289,7 @@ class PathPlanner:
 
             #Check for collisions
             safe_i = self.collision_check(trajectory_o)
-            if safe_i == -1:
+            if safe_i <= 0:
                 continue
             # Add the last point that didn't have a collision
             # No cost considered in RRT
