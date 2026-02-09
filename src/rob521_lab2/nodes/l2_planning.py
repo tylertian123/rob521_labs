@@ -27,7 +27,10 @@ def load_map_yaml(filename):
 #Node for building a graph
 class Node:
     def __init__(self, point, parent_id, cost):
-        assert point.shape == (3, 1), "Wrong shape! Make sure theta is included!"
+        if point.shape == (3,):
+            point = point.reshape(3, 1)
+        else:
+            assert point.shape == (3, 1), f"Wrong shape {point.shape}! Make sure theta is included!"
         self.point = point # A 3 by 1 vector [x, y, theta]
         self.parent_id = parent_id # The parent node id that leads to this node (There should only every be one parent in RRT)
         self.cost = cost # The cost to come to this node
@@ -202,7 +205,7 @@ class PathPlanner:
         safe_i = -1
         for i, (occ_rows, occ_cols) in enumerate(occ_points):
             # TODO are True cells occupied or False cells occupied?
-            if np.any(self.occupancy_map[occ_rows, occ_cols]):
+            if not np.all(self.occupancy_map[occ_rows, occ_cols]):
                 safe_i = i - 1
                 break
         else:
@@ -258,8 +261,14 @@ class PathPlanner:
             new_point = trajectory_o[:, safe_i]
             self.nodes.append(Node(new_point, closest_node_id, 0))
             self.nodes[closest_node_id].children_ids.append(len(self.nodes) - 1)
+
+            # Visualization
+            self.window.add_se2_pose(self.nodes[-1].point.ravel(), length=5, color=(0, 0, 255))
+            self.window.add_point(point.ravel(), radius=2, color=(127, 127, 0))
             
-            if np.hypot(self.goal_point[0, 0] - new_point[0, 0], self.goal_point[1, 0] - new_point[1, 0]) <= self.stopping_dist:
+            if np.hypot(self.goal_point[0, 0] - self.nodes[-1].point[0, 0],
+                        self.goal_point[1, 0] - self.nodes[-1].point[1, 0]) <= self.stopping_dist:
+                print(f"Path found after {iter_count + 1} iterations")
                 break
         else:
             raise RuntimeError(f"No path found after {iter_count + 1} iterations!")
@@ -331,6 +340,7 @@ class PathPlanner:
 
             if np.hypot(self.goal_point[0, 0] - self.nodes[-1].point[0, 0],
                         self.goal_point[1, 0] - self.nodes[-1].point[1, 0]) <= self.stopping_dist:
+                print(f"Path found after {iter_count + 1} iterations")
                 break
         else:
             raise RuntimeError(f"No path found after {iter_count + 1} iterations!")
