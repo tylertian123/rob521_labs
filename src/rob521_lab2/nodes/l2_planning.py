@@ -116,13 +116,44 @@ class PathPlanner:
         #This controller determines the velocities that will nominally move the robot from node i to node s
         #Max velocities should be enforced
         print("TO DO: Implement a control scheme to drive you towards the sampled point")
+        
+        # PID control
+        kP = 1
+        kI = 0.5
+        kD = 0.3
+
+        heading_error = np.arctan2(point_s[1] - node_i[1], point_s[0] - node_i[0]) - node_i[2]
+        heading_error = (heading_error + np.pi) % (2 * np.pi) - np.pi  # Normalize to [-pi, pi]
+        distance_error = np.linalg.norm(point_s - node_i[0:2])
+
+        # calculate velocity and rotational velocity
+        vel = kP * distance_error + 
+        rot_vel = kP * heading_error
         return 0, 0
     
-    def trajectory_rollout(self, vel, rot_vel):
+    def trajectory_rollout(self, vel, rot_vel, point):
         # Given your chosen velocities determine the trajectory of the robot for your given timestep
         # The returned trajectory should be a series of points to check for collisions
         print("TO DO: Implement a way to rollout the controls chosen")
-        return np.zeros((3, self.num_substeps))
+
+        ## NOTE FROM ORRIN: I've Changed the function signature to include the start point
+        # preallocated trajectory and steps (x, y, theta)
+        startX, startY, startTheta = point.flatten()
+        trajectory = np.zeros((3, self.num_substeps))
+        steps = np.linspace(0, self.timestep, self.num_substeps)
+
+        if rot_vel == 0:  # moving straight
+            trajectory[0, :] = startX + vel * steps * np.cos(startTheta)
+            trajectory[1, :] = startY + vel * steps * np.sin(startTheta)
+            trajectory[2, :] = startTheta * np.ones(self.num_substeps)
+        else:  # moving along a curve
+            radius = vel / rot_vel
+            trajectory[0, :] = startX + radius * (np.sin(startTheta + rot_vel * steps) - np.sin(startTheta))
+            ## NOTE: MAYBE THE SIGN IS WRONG FOR Y? CHECK WHEN TESTING
+            trajectory[1, :] = startY + radius * (np.cos(startTheta + rot_vel * steps) - np.cos(startTheta))
+            trajectory[2, :] = startTheta + rot_vel * steps
+
+        return trajectory
     
     # NOTE: this function returns indices in (row, col) order (i.e. (y, x), not (x, y))
     # It also assumes the y axis points up, which might not be the case for the occupancy grid
