@@ -106,37 +106,40 @@ class PathPlanner:
         #This function drives the robot from node_i towards point_s. This function does has many solutions!
         #node_i is a 3 by 1 vector [x;y;theta] this can be used to construct the SE(2) matrix T_{OI} in course notation
         #point_s is the sampled point vector [x; y]
-        print("TO DO: Implment a method to simulate a trajectory given a sampled point")
         vel, rot_vel = self.robot_controller(node_i, point_s)
-
-        robot_traj = self.trajectory_rollout(vel, rot_vel)
+        robot_traj = self.trajectory_rollout(vel, rot_vel, node_i)
         return robot_traj
     
     def robot_controller(self, node_i, point_s):
         #This controller determines the velocities that will nominally move the robot from node i to node s
         #Max velocities should be enforced
-        print("TO DO: Implement a control scheme to drive you towards the sampled point")
+        #         
+        # NOTE: Opting for simple proportional control. Could do PID if necessary.
+        distance = np.linalg.norm(point_s[:2] - node_i[:2])
+        angle_to_goal = np.arctan2(point_s[1] - node_i[1], point_s[0] - node_i[0])
+        # normalize angle
+        angle_to_goal = (angle_to_goal + np.pi) % (2 * np.pi) - np.pi
         
-        # PID control
-        kP = 1
-        kI = 0.5
-        kD = 0.3
+        # Proportional control for angular velocity
+        max_threshold = np.pi / 4  # Threshold angle for maximum rotation
+        if np.abs(angle_to_goal) > max_threshold:  # If the angle is large, use max rotation
+            rot_vel = self.rot_vel_max
+        else:
+            rot_vel = self.rot_vel_max * (angle_to_goal / max_threshold)
+        rot_vel = min(rot_vel, self.rot_vel_max)  # Cap at max rotation velocity
+        rot_vel = rot_vel * np.sign(angle_to_goal)  # Ensure correct direction
 
-        heading_error = np.arctan2(point_s[1] - node_i[1], point_s[0] - node_i[0]) - node_i[2]
-        heading_error = (heading_error + np.pi) % (2 * np.pi) - np.pi  # Normalize to [-pi, pi]
-        distance_error = np.linalg.norm(point_s - node_i[0:2])
+        # Proportional control for linear velocity
+        linear_vel = self.vel_max * distance
+        linear_vel = min(linear_vel, self.vel_max)  # Cap at max velocity
 
-        # calculate velocity and rotational velocity
-        vel = kP * distance_error + 
-        rot_vel = kP * heading_error
-        return 0, 0
+        return linear_vel, rot_vel    
     
     def trajectory_rollout(self, vel, rot_vel, point):
         # Given your chosen velocities determine the trajectory of the robot for your given timestep
         # The returned trajectory should be a series of points to check for collisions
-        print("TO DO: Implement a way to rollout the controls chosen")
 
-        ## NOTE FROM ORRIN: I've Changed the function signature to include the start point
+        ## NOTE: Changed the function signature to include the start point
         # preallocated trajectory and steps (x, y, theta)
         startX, startY, startTheta = point.flatten()
         trajectory = np.zeros((3, self.num_substeps))
@@ -148,9 +151,9 @@ class PathPlanner:
             trajectory[2, :] = startTheta * np.ones(self.num_substeps)
         else:  # moving along a curve
             radius = vel / rot_vel
-            trajectory[0, :] = startX + radius * (np.sin(startTheta + rot_vel * steps) - np.sin(startTheta))
+            trajectory[0, :] = startX + radius * (np.cos(startTheta + rot_vel * steps) - np.cos(startTheta))
             ## NOTE: MAYBE THE SIGN IS WRONG FOR Y? CHECK WHEN TESTING
-            trajectory[1, :] = startY + radius * (np.cos(startTheta + rot_vel * steps) - np.cos(startTheta))
+            trajectory[1, :] = startY + radius * (np.sin(startTheta + rot_vel * steps) - np.sin(startTheta))
             trajectory[2, :] = startTheta + rot_vel * steps
 
         return trajectory
@@ -180,7 +183,7 @@ class PathPlanner:
         #Hint: The disk function is included to help you with this function
         cell_coords = self.point_to_cell(points)
         radius_cells = self.robot_radius / self.resolution
-        cells = [disk((x, y), radius_cells, shape=self.map_shape) for (x, y) in cell_coords]
+        cells = [disk((x, y), radius_cells, shape=self.map_shape) for (x, y) in cell_coords.T]
         # Returns an array of 2-array-tuples, first one containing row indices, second one containing column indices
         return cells
 
@@ -232,11 +235,11 @@ class PathPlanner:
         return
 
     #Planner Functions
-    def rrt_planning(self):
+    def rrt_planning(self, max_iter=1000):
         #This function performs RRT on the given map and robot
         #You do not need to demonstrate this function to the TAs, but it is left in for you to check your work
         # TODO tune this
-        for iter_count in range(1000):
+        for iter_count in range(max_iter):
             #Sample map space
             point = self.sample_map_space()
 
@@ -353,7 +356,8 @@ def main():
 
     #RRT precursor
     path_planner = PathPlanner(map_filename, map_setings_filename, goal_point, stopping_dist)
-    nodes = path_planner.rrt_star_planning()
+    # nodes = path_planner.rrt_star_planning()
+    nodes = path_planner.rrt_planning(max_iter=3000)
     node_path_metric = np.hstack(path_planner.recover_path())
 
     #Leftover test functions
