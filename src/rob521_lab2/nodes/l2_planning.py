@@ -284,7 +284,9 @@ class PathPlanner:
             # Radius of circle
             r = (dxv**2 + dyv**2) / (2 * dyv)
             # angle of arc
-            a = 2 * np.arcsin(np.hypot(dxv, dyv) / (2 * r))
+            arg = np.hypot(dxv, dyv) / (2 * r)
+            arg = np.clip(arg, -1.0, 1.0)
+            a = 2 * np.arcsin(arg)
 
             T = max(a / self.rot_vel_max, np.hypot(dxv, dyv) / self.vel_max)
             omega = a / T
