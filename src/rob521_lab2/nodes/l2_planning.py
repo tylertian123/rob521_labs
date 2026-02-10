@@ -78,6 +78,8 @@ class PathPlanner:
         self.vel_max = 0.5 #m/s (Feel free to change!)
         self.rot_vel_max = 0.4 #rad/s (Feel free to change!)
 
+        self.collision_disk = disk((0, 0), self.robot_radius / self.resolution)
+
         #Goal Parameters
         self.goal_point = goal_point #m
         self.stopping_dist = stopping_dist #m
@@ -220,11 +222,10 @@ class PathPlanner:
     def points_to_robot_circle(self, points):
         #Convert a series of [x,y] points to robot map footprints for collision detection
         #Hint: The disk function is included to help you with this function
-        cell_coords = self.point_to_cell(points)
-        radius_cells = self.robot_radius / self.resolution
-        cells = [disk((x, y), radius_cells, shape=self.map_shape) for (x, y) in cell_coords.T]
+        cell_coords = np.round(self.point_to_cell(points)).astype(int).T
         # Returns an array of 2-array-tuples, first one containing row indices, second one containing column indices
-        return cells
+        yield from ((np.clip(self.collision_disk[0] + row, 0, self.occupancy_map.shape[0] - 1),
+                     np.clip(self.collision_disk[1] + col, 0, self.occupancy_map.shape[1] - 1)) for (row, col) in cell_coords)
 
     def collision_check(self, traj) -> int:
         """
@@ -237,14 +238,13 @@ class PathPlanner:
         :return: Index of the collision-free point within the trajectory.
         """
         # Strip theta
-        occ_points = self.points_to_robot_circle(traj[:2, :])
         safe_i = -1
-        for i, (occ_rows, occ_cols) in enumerate(occ_points):
+        for i, (occ_rows, occ_cols) in enumerate(self.points_to_robot_circle(traj[:2, :])):
             if not np.all(self.occupancy_map[occ_rows, occ_cols]):
                 safe_i = i - 1
                 break
         else:
-            safe_i = len(occ_points) - 1
+            safe_i = traj.shape[1] - 1
         return safe_i
     
     def add_node(self, node: Node):
@@ -466,7 +466,7 @@ def main():
 
     #RRT precursor
     path_planner = PathPlanner(map_filename, map_setings_filename, goal_point, stopping_dist)
-    nodes = path_planner.rrt_star_planning()
+    nodes = path_planner.rrt_planning()
     # nodes = path_planner.rrt_planning(max_iter=150000, visualize=True)
     node_path_metric = np.hstack(path_planner.recover_path())
 
