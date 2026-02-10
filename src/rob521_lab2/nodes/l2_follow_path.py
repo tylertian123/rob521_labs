@@ -23,8 +23,8 @@ ROT_GOAL_TOL = .3  # rad, tolerance to consider a goal complete
 TRANS_VEL_OPTS = [0, 0.025, 0.13, 0.26]  # m/s, max of real robot is .26
 ROT_VEL_OPTS = np.linspace(-1.82, 1.82, 11)  # rad/s, max of real robot is 1.82
 CONTROL_RATE = 5  # Hz, how frequently control signals are sent
-CONTROL_HORIZON = 5  # seconds. if this is set too high and INTEGRATION_DT is too low, code will take a long time to run!
-INTEGRATION_DT = .025  # s, delta t to propagate trajectories forward by
+CONTROL_HORIZON = 2  # seconds. if this is set too high and INTEGRATION_DT is too low, code will take a long time to run!
+INTEGRATION_DT = .2  # s, delta t to propagate trajectories forward by
 COLLISION_RADIUS = 0.225  # m, radius from base_link to use for collisions, min of 0.2077 based on dimensions of .281 x .306
 ROT_DIST_MULT = .1  # multiplier to change effect of rotational distance in choosing correct control
 OBS_DIST_MULT = .1  # multiplier to change the effect of low distance to obstacles on a path
@@ -130,15 +130,14 @@ class PathFollower():
             local_paths = np.zeros([self.horizon_timesteps + 1, self.num_opts, 3])
             local_paths[0] = np.atleast_2d(self.pose_in_map_np).repeat(self.num_opts, axis=0)
 
-            # print("TO DO: Propogate the trajectory forward, storing the resulting points in local_paths!")
-            # for t in range(1, self.horizon_timesteps + 1):
+            print("TO DO: Propogate the trajectory forward, storing the resulting points in local_paths!")
             # propogate trajectory forward, assuming perfect control of velocity and no dynamic effects
             start = self.pose_in_map_np
             end = self.cur_goal
             startX, startY, startTheta = start.flatten()
             t = np.linspace(0, CONTROL_HORIZON, self.horizon_timesteps + 1, endpoint=True)
+            trajectory = np.zeros((self.horizon_timesteps + 1, 3))
             for opt in range(self.num_opts):
-                trajectory = np.zeros((self.horizon_timesteps + 1, 3))
                 vel, rot_vel = self.all_opts[opt]
                 if rot_vel == 0:  # moving straight
                     trajectory[:, 0] = startX + vel * t * np.sin(startTheta)
@@ -159,16 +158,13 @@ class PathFollower():
             valid_opts = np.ones(self.num_opts, dtype=bool)
             local_paths_lowest_collision_dist = np.ones(self.num_opts) * 50
 
-            # print("TO DO: Check the points in local_path_pixels for collisions")
+            print("TO DO: Check the points in local_path_pixels for collisions")
             for opt in range(local_paths_pixels.shape[1]):
-                valid = True
-                traj = local_paths_pixels[:, opt, :]
-                occ_points = self.points_to_obstacle_circle(traj[:, :2].T)
+                occ_points = self.point_to_robot_circle(local_paths_pixels[:, opt].T)
                 for i, (occ_rows, occ_cols) in enumerate(occ_points):
-                    if not np.all(self.map_np[occ_rows, occ_cols]):
-                        valid = False
+                    if np.any(self.map_np[occ_rows, occ_cols]):
+                        valid_opts[opt] = False
                         break
-                valid_opts[opt] = valid
 
             # remove trajectories that were deemed to have collisions
             # print("TO DO: Remove trajectories with collisions!")
@@ -241,9 +237,36 @@ class PathFollower():
         self.cmd_pub.publish(Twist())
         rospy.loginfo("Published zero vel on shutdown.")
 
-    def points_to_obstacle_circle(self, points):
+    def trajectory_footprint_mask(self, points):
         cell_coords = self.point_to_cell(points)
-        radius_cells = COLLISION_RADIUS / self.map_resolution
+        traj_footprint = np.zeros_like(self.map_np, dtype=bool)
+        for (x, y) in cell_coords.T:
+            rr, cc = disk((x, y), self.collision_radius_pix, shape=self.map_np.shape)
+            traj_footprint[rr, cc] = True
+        # returns array the size of the map with True for cells that are within the collision radius of any point in the trajectory
+        return traj_footprint
+
+    def trajectory_footprint_mask_from_pixels(self, pixels):
+        traj_footprint = np.zeros_like(self.map_np, dtype=bool)
+        for (x, y) in pixels:
+            rr, cc = disk((x, y), self.collision_radius_pix, shape=self.map_np.shape)
+            traj_footprint[rr, cc] = True
+        # returns array the size of the map with True for cells that are within the collision radius of any point in the trajectory
+        return traj_footprint
+
+    def pixels_to_robot_circle(self, pixels):
+        #Convert a series of [x,y] points to robot map footprints for collision detection
+        #Hint: The disk function is included to help you with this function
+        radius_cells = self.collision_radius_pix
+        cells = [disk((x, y), radius_cells, shape=self.map_np.shape) for (x, y) in pixels]
+        # Returns an array of 2-array-tuples, first one containing row indices, second one containing column indices
+        return cells
+
+    def point_to_robot_circle(self, points):
+        #Convert a series of [x,y] points to robot map footprints for collision detection
+        #Hint: The disk function is included to help you with this function
+        cell_coords = self.point_to_cell(points)
+        radius_cells = self.collision_radius_pix
         cells = [disk((x, y), radius_cells, shape=self.map_np.shape) for (x, y) in cell_coords.T]
         # Returns an array of 2-array-tuples, first one containing row indices, second one containing column indices
         return cells
