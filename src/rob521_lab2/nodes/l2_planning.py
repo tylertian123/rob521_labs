@@ -101,7 +101,7 @@ class PathPlanner:
         
         #Pygame window for visualization
         self.window = pygame_utils.PygameWindow(
-            "Path Planner", (1000, 1000), self.occupancy_map.shape, self.map_settings_dict, self.goal_point, self.stopping_dist)
+            "Path Planner", map_filename, 1000, self.occupancy_map.shape, self.map_settings_dict, self.goal_point, self.stopping_dist)
         return
 
     #Functions required for RRT
@@ -336,7 +336,7 @@ class PathPlanner:
         #This function performs RRT on the given map and robot
         #You do not need to demonstrate this function to the TAs, but it is left in for you to check your work
         # Preallocate space for vectorized closest node computation
-        self.node_pos_np = np.zeros((3, max_iter), dtype=np.float32)
+        self.node_pos_np = np.zeros((3, max_iter + 1), dtype=np.float32)
         for iter_count in tqdm.trange(max_iter):
             #Sample map space
             point = self.sample_map_space()
@@ -374,7 +374,8 @@ class PathPlanner:
     def rrt_star_planning(self, max_iter=150000, visualize=True):
         #This function performs RRT* for the given map and robot
         # Preallocate space for vectorized closest node computation
-        self.node_pos_np = np.zeros((3, max_iter), dtype=np.float32)
+        self.node_pos_np = np.zeros((3, max_iter + 1), dtype=np.float32)
+        path_found = False
         for iter_count in tqdm.trange(max_iter):
             if visualize and iter_count % 100 == 0:
                 self.draw_tree()
@@ -437,11 +438,12 @@ class PathPlanner:
                     self.update_children(i, cost_delta)
 
 
-            if np.hypot(self.goal_point[0, 0] - self.nodes[-1].point[0, 0],
-                        self.goal_point[1, 0] - self.nodes[-1].point[1, 0]) <= self.stopping_dist:
+            if not path_found and \
+                np.hypot(self.goal_point[0, 0] - self.nodes[-1].point[0, 0],
+                         self.goal_point[1, 0] - self.nodes[-1].point[1, 0]) <= self.stopping_dist:
                 print(f"Path found after {iter_count + 1} iterations")
-                break
-        else:
+                path_found = True
+        if not path_found:
             raise RuntimeError(f"No path found after {iter_count + 1} iterations!")
         return self.nodes
     
