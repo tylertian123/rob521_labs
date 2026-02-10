@@ -369,13 +369,13 @@ class PathPlanner:
                 break
         else:
             raise RuntimeError(f"No path found after {iter_count + 1} iterations!")
-        return self.nodes
+        return len(self.nodes) - 1
     
     def rrt_star_planning(self, max_iter=150000, visualize=True):
         #This function performs RRT* for the given map and robot
         # Preallocate space for vectorized closest node computation
         self.node_pos_np = np.zeros((3, max_iter + 1), dtype=np.float32)
-        path_found = False
+        goal_node = -1
         for iter_count in tqdm.trange(max_iter):
             if visualize and iter_count % 100 == 0:
                 self.draw_tree()
@@ -438,14 +438,14 @@ class PathPlanner:
                     self.update_children(i, cost_delta)
 
 
-            if not path_found and \
+            if goal_node == -1 and \
                 np.hypot(self.goal_point[0, 0] - self.nodes[-1].point[0, 0],
                          self.goal_point[1, 0] - self.nodes[-1].point[1, 0]) <= self.stopping_dist:
                 print(f"Path found after {iter_count + 1} iterations")
-                path_found = True
-        if not path_found:
+                goal_node = len(self.nodes) - 1
+        if goal_node == -1:
             raise RuntimeError(f"No path found after {iter_count + 1} iterations!")
-        return self.nodes
+        return goal_node
     
     def recover_path(self, node_id = -1):
         path = [self.nodes[node_id].point]
@@ -468,9 +468,8 @@ def main():
 
     #RRT precursor
     path_planner = PathPlanner(map_filename, map_settings_filename, goal_point, stopping_dist)
-    nodes = path_planner.rrt_star_planning(max_iter=3000)
-    # nodes = path_planner.rrt_planning(max_iter=150000, visualize=True)
-    node_path_metric = np.hstack(path_planner.recover_path())
+    goal = path_planner.rrt_star_planning(max_iter=10000)
+    node_path_metric = np.hstack(path_planner.recover_path(goal))
 
     #Leftover test functions
     np.save("shortest_path.npy", node_path_metric)
