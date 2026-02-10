@@ -61,10 +61,14 @@ class PathPlanner:
         # self.bounds[1, 1] = self.map_settings_dict["origin"][1] + self.map_shape[0] * self.map_settings_dict["resolution"]
         # Constrain sampling to only within the nonempty areas of the map
         r, c = np.nonzero(self.occupancy_map < self.map_settings_dict["occupied_thresh"])
-        min_row = np.min(r)
-        min_col = np.min(c)
-        max_row = np.max(r)
-        max_col = np.max(c)
+        # min_row = np.min(r)
+        # min_col = np.min(c)
+        # max_row = np.max(r)
+        # max_col = np.max(c)
+        min_row = 0
+        min_col = 0
+        max_row = self.map_shape[0] - 1
+        max_col = self.map_shape[1] - 1
         
         self.bounds[0, 0] = self.origin[0] + min_col * self.resolution
         self.bounds[0, 1] = self.origin[0] + max_col * self.resolution
@@ -74,7 +78,7 @@ class PathPlanner:
         self.tree_bounds = np.zeros((2, 2))
 
         #Robot information
-        self.robot_radius = 0.22 #m
+        self.robot_radius = 0.44 #m
         self.vel_max = 0.5 #m/s (Feel free to change!)
         self.rot_vel_max = 0.4 #rad/s (Feel free to change!)
 
@@ -463,12 +467,12 @@ def main():
     map_settings_filename = "myhal.yaml"
 
     #robot information
-    goal_point = np.array([[7], [0]]) #m
-    stopping_dist = 0.5 #m
+    goal_point = np.array([[7.5], [0]]) #m
+    stopping_dist = 0.1 #m
 
     #RRT precursor
     path_planner = PathPlanner(map_filename, map_settings_filename, goal_point, stopping_dist)
-    goal = path_planner.rrt_star_planning(max_iter=10000)
+    goal = path_planner.rrt_planning(max_iter=10000)
     node_path_metric = np.hstack(path_planner.recover_path(goal))
 
     #Leftover test functions
