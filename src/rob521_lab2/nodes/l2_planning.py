@@ -307,10 +307,17 @@ class PathPlanner:
         # Use path length as cost (TODO find a better metric?)
         return dist
     
-    def update_children(self, node_id):
+    def update_children(self, node_id, cost_delta):
         #Given a node_id with a changed cost, update all connected nodes with the new cost
-        print("TO DO: Update the costs of connected nodes after rewiring.")
-        return
+        # TODO: This is fundamentally flawed, because the updated node will have a new theta value,
+        # so the path to its children will be different, which changes the children's thetas,
+        # and so on and so forth until the leaf nodes. Doing this propagation would be very expensive.
+        # Furthermore there is no guarantee that these new paths will be collision-free or possible
+        # given the maximum linear and angular velocity constraints. If a path ends up in collision,
+        # do we just abandon that entire subtree?
+        for i in self.nodes[node_id].children_ids:
+            self.nodes[i].cost += cost_delta
+            self.update_children(i, cost_delta)
 
     #Planner Functions
     def rrt_planning(self, max_iter=150000, visualize=True):
@@ -403,15 +410,17 @@ class PathPlanner:
                     continue
                 edge_cost = self.cost_to_come(traj)
                 # Rewire
-                if self.nodes[-1].cost + edge_cost < self.nodes[i].cost:
+                new_cost = self.nodes[-1].cost + edge_cost
+                if new_cost < self.nodes[i].cost:
+                    cost_delta = new_cost - self.nodes[i].cost
                     old_parent = self.nodes[i].parent_id
                     self.nodes[old_parent].children_ids.remove(i)
                     self.nodes[-1].children_ids.append(i)
                     self.nodes[i].parent_id = len(self.nodes) - 1
-                    self.nodes[i].cost = self.nodes[-1].cost + edge_cost
+                    self.nodes[i].cost = new_cost
                     self.nodes[i].point = traj[-1]
                     # Magically propagate cost?
-                    self.update_children(i)
+                    self.update_children(i, cost_delta)
 
 
             if np.hypot(self.goal_point[0, 0] - self.nodes[-1].point[0, 0],
