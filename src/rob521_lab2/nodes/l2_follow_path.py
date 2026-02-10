@@ -78,6 +78,7 @@ class PathFollower():
         self.collision_marker.scale.z = 1.0
         self.collision_marker.color.g = 1.0
         self.collision_marker.color.a = 0.5
+        self.precomputed_disk = disk((0, 0), self.collision_radius_pix)
 
         # transforms
         self.map_baselink_tf = self.tf_buffer.lookup_transform('map', 'base_link', rospy.Time(0), rospy.Duration(2.0))
@@ -129,7 +130,6 @@ class PathFollower():
             local_paths = np.zeros([self.horizon_timesteps + 1, self.num_opts, 3])
             local_paths[0] = np.atleast_2d(self.pose_in_map_np).repeat(self.num_opts, axis=0)
 
-            print("TO DO: Propogate the trajectory forward, storing the resulting points in local_paths!")
             # propogate trajectory forward, assuming perfect control of velocity and no dynamic effects
             start = self.pose_in_map_np
             end = self.cur_goal
@@ -157,11 +157,9 @@ class PathFollower():
             valid_opts = np.ones(self.num_opts, dtype=bool)
             local_paths_lowest_collision_dist = np.ones(self.num_opts) * 50
 
-            print("TO DO: Check the points in local_path_pixels for collisions")
             for opt in range(local_paths_pixels.shape[1]):
-                occ_points = self.pixels_to_robot_circle(local_paths_pixels[:, opt, :])
-                for i, (occ_rows, occ_cols) in enumerate(occ_points):
-                    if np.any(self.map_np[occ_cols, occ_rows]):
+                for (occ_cols, occ_rows) in self.pixels_to_robot_circle(local_paths_pixels[:, opt, :]):
+                    if np.any(self.map_np[occ_rows, occ_cols]):
                         valid_opts[opt] = False
                         break
 
@@ -170,7 +168,6 @@ class PathFollower():
             # local_paths = local_paths[:, valid_opts, :]
 
             # calculate final cost and choose best option
-            print("TO DO: Calculate the final cost and choose the best control option!")
             final_cost = np.zeros(self.num_opts)
             for opt in range(local_paths.shape[1]):
                 if not valid_opts[opt]:
@@ -197,8 +194,8 @@ class PathFollower():
             self.cmd_pub.publish(utils.unicyle_vel_to_twist(control))
 
             # uncomment out for debugging if necessary
-            print("Selected control: {control}, Loop time: {time}, Max time: {max_time}".format(
-                control=control, time=(rospy.Time.now() - tic).to_sec(), max_time=1/CONTROL_RATE))
+            rospy.logdebug("Selected control: {control}, Loop time: {time}, Max time: {max_time}".format(
+                           control=control, time=(rospy.Time.now() - tic).to_sec(), max_time=1/CONTROL_RATE))
 
             self.rate.sleep()
 
@@ -238,11 +235,9 @@ class PathFollower():
 
     def pixels_to_robot_circle(self, pixels):
         #Convert a series of [x,y] points to robot map footprints for collision detection
-        #Hint: The disk function is included to help you with this function
-        radius_cells = self.collision_radius_pix
-        cells = [disk((x, y), radius_cells, shape=self.map_np.shape) for (x, y) in pixels]
+        pixels = np.round(pixels).astype(int)
+        yield from ((self.precomputed_disk[0] + row, self.precomputed_disk[1] + col) for (row, col) in pixels)
         # Returns an array of 2-array-tuples, first one containing row indices, second one containing column indices
-        return cells
 
 
 if __name__ == '__main__':
