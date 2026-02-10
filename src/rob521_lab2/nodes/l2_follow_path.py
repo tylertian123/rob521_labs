@@ -17,18 +17,19 @@ from visualization_msgs.msg import Marker
 # ros and se2 conversion utils
 import utils
 
-TRANS_GOAL_TOL = .1  # m, tolerance to consider a goal complete
+# TRANS_GOAL_TOL = .1  # m, tolerance to consider a goal complete
+TRANS_GOAL_TOL = .5  # m, tolerance to consider a goal complete
 ROT_GOAL_TOL = .3  # rad, tolerance to consider a goal complete
 TRANS_VEL_OPTS = [0, 0.025, 0.13, 0.26]  # m/s, max of real robot is .26
 ROT_VEL_OPTS = np.linspace(-1.82, 1.82, 11)  # rad/s, max of real robot is 1.82
 CONTROL_RATE = 5  # Hz, how frequently control signals are sent
-CONTROL_HORIZON = 2  # seconds. if this is set too high and INTEGRATION_DT is too low, code will take a long time to run!
-INTEGRATION_DT = .1  # s, delta t to propagate trajectories forward by
+CONTROL_HORIZON = 3  # seconds. if this is set too high and INTEGRATION_DT is too low, code will take a long time to run!
+INTEGRATION_DT = .2  # s, delta t to propagate trajectories forward by
 COLLISION_RADIUS = 0.225  # m, radius from base_link to use for collisions, min of 0.2077 based on dimensions of .281 x .306
 ROT_DIST_MULT = .1  # multiplier to change effect of rotational distance in choosing correct control
 OBS_DIST_MULT = .1  # multiplier to change the effect of low distance to obstacles on a path
 MIN_TRANS_DIST_TO_USE_ROT = TRANS_GOAL_TOL  # m, robot has to be within this distance to use rot distance in cost
-PATH_NAME = 'path.npy'  # saved path from l2_planning.py, should be in the same directory as this file
+PATH_NAME = 'shortest_path.npy'  # saved path from l2_planning.py, should be in the same directory as this file
 
 # here are some hardcoded paths to use if you want to develop l2_planning and this file in parallel
 # TEMP_HARDCODE_PATH = [[2, 0, 0], [2.75, -1, -np.pi/2], [2.75, -4, -np.pi/2], [2, -4.4, np.pi]]  # almost collision-free
@@ -78,7 +79,6 @@ class PathFollower():
         self.collision_marker.scale.z = 1.0
         self.collision_marker.color.g = 1.0
         self.collision_marker.color.a = 0.5
-        self.precomputed_disk = disk((0, 0), self.collision_radius_pix)
 
         # transforms
         self.map_baselink_tf = self.tf_buffer.lookup_transform('map', 'base_link', rospy.Time(0), rospy.Duration(2.0))
@@ -90,8 +90,8 @@ class PathFollower():
         cur_dir = os.path.dirname(os.path.realpath(__file__))
 
         # to use the temp hardcoded paths above, switch the comment on the following two lines
-        # self.path_tuples = np.load(os.path.join(cur_dir, 'path.npy')).T
-        self.path_tuples = np.array(TEMP_HARDCODE_PATH)
+        self.path_tuples = np.load(os.path.join(cur_dir, PATH_NAME)).T
+        # self.path_tuples = np.array(TEMP_HARDCODE_PATH)
 
         self.path = utils.se2_pose_list_to_path(self.path_tuples, 'map')
         self.global_path_pub.publish(self.path)
@@ -130,6 +130,7 @@ class PathFollower():
             local_paths = np.zeros([self.horizon_timesteps + 1, self.num_opts, 3])
             local_paths[0] = np.atleast_2d(self.pose_in_map_np).repeat(self.num_opts, axis=0)
 
+            print("TO DO: Propogate the trajectory forward, storing the resulting points in local_paths!")
             # propogate trajectory forward, assuming perfect control of velocity and no dynamic effects
             start = self.pose_in_map_np
             end = self.cur_goal
@@ -157,9 +158,11 @@ class PathFollower():
             valid_opts = np.ones(self.num_opts, dtype=bool)
             local_paths_lowest_collision_dist = np.ones(self.num_opts) * 50
 
+            print("TO DO: Check the points in local_path_pixels for collisions")
             for opt in range(local_paths_pixels.shape[1]):
-                for (occ_cols, occ_rows) in self.pixels_to_robot_circle(local_paths_pixels[:, opt, :]):
-                    if np.any(self.map_np[occ_rows, occ_cols]):
+                occ_points = self.pixels_to_robot_circle(local_paths_pixels[:, opt, :])
+                for i, (occ_rows, occ_cols) in enumerate(occ_points):
+                    if np.any(self.map_np[occ_cols, occ_rows]):
                         valid_opts[opt] = False
                         break
 
@@ -168,6 +171,7 @@ class PathFollower():
             # local_paths = local_paths[:, valid_opts, :]
 
             # calculate final cost and choose best option
+            print("TO DO: Calculate the final cost and choose the best control option!")
             final_cost = np.zeros(self.num_opts)
             for opt in range(local_paths.shape[1]):
                 if not valid_opts[opt]:
@@ -194,8 +198,8 @@ class PathFollower():
             self.cmd_pub.publish(utils.unicyle_vel_to_twist(control))
 
             # uncomment out for debugging if necessary
-            rospy.logdebug("Selected control: {control}, Loop time: {time}, Max time: {max_time}".format(
-                           control=control, time=(rospy.Time.now() - tic).to_sec(), max_time=1/CONTROL_RATE))
+            print("Selected control: {control}, Loop time: {time}, Max time: {max_time}".format(
+                control=control, time=(rospy.Time.now() - tic).to_sec(), max_time=1/CONTROL_RATE))
 
             self.rate.sleep()
 
@@ -235,9 +239,11 @@ class PathFollower():
 
     def pixels_to_robot_circle(self, pixels):
         #Convert a series of [x,y] points to robot map footprints for collision detection
-        pixels = np.round(pixels).astype(int)
-        yield from ((self.precomputed_disk[0] + row, self.precomputed_disk[1] + col) for (row, col) in pixels)
+        #Hint: The disk function is included to help you with this function
+        radius_cells = self.collision_radius_pix
+        cells = [disk((x, y), radius_cells, shape=self.map_np.shape) for (x, y) in pixels]
         # Returns an array of 2-array-tuples, first one containing row indices, second one containing column indices
+        return cells
 
 
 if __name__ == '__main__':
