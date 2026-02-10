@@ -181,13 +181,15 @@ class PathFollower():
                 if not valid_opts[opt]:
                     final_cost[opt] = np.inf
                     continue
-                traj = local_paths[:, opt, :]
-                final_pos = traj[-1, :2]
+                final_traj_pos = local_paths[-1, opt, :2]
                 # TODO: Just manhattan dist for now but should make 
                 # it consider distance to obstacles, etc.
-                final_cost[opt] = cityblock(final_pos[:2], end[:2])
+                final_cost[opt] = cityblock(final_traj_pos[:2], self.cur_goal[:2])
 
             if final_cost.size == 0:  # hardcoded recovery if all options have collision
+                control = [-.1, 0]
+            elif final_cost.min() == np.inf:
+                # NOTE: Our hardcoded recovery behaviour since we don't remove from local plan list
                 control = [-.1, 0]
             else:
                 # best_opt = valid_opts[final_cost.argmin()]
@@ -200,8 +202,8 @@ class PathFollower():
             self.cmd_pub.publish(utils.unicyle_vel_to_twist(control))
 
             # uncomment out for debugging if necessary
-            # print("Selected control: {control}, Loop time: {time}, Max time: {max_time}".format(
-            #     control=control, time=(rospy.Time.now() - tic).to_sec(), max_time=1/CONTROL_RATE))
+            print("Selected control: {control}, Loop time: {time}, Max time: {max_time}".format(
+                control=control, time=(rospy.Time.now() - tic).to_sec(), max_time=1/CONTROL_RATE))
 
             self.rate.sleep()
 
