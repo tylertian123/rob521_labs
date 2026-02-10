@@ -459,16 +459,16 @@ class PathPlanner:
 def main():
     np.random.seed(0)
     #Set map information
-    map_filename = "willowgarageworld_05res.png"
-    map_setings_filename = "willowgarageworld_05res.yaml"
+    map_filename = "myhal.png"
+    map_settings_filename = "myhal.yaml"
 
     #robot information
-    goal_point = np.array([[42.05], [-44]]) #m
+    goal_point = np.array([[7], [0]]) #m
     stopping_dist = 0.5 #m
 
     #RRT precursor
-    path_planner = PathPlanner(map_filename, map_setings_filename, goal_point, stopping_dist)
-    nodes = path_planner.rrt_planning()
+    path_planner = PathPlanner(map_filename, map_settings_filename, goal_point, stopping_dist)
+    nodes = path_planner.rrt_star_planning(max_iter=3000)
     # nodes = path_planner.rrt_planning(max_iter=150000, visualize=True)
     node_path_metric = np.hstack(path_planner.recover_path())
 
