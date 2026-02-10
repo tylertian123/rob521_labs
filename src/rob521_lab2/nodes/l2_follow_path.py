@@ -5,6 +5,7 @@ import os
 import numpy as np
 from scipy.linalg import block_diag
 from scipy.spatial.distance import cityblock
+from skimage.draw import disk
 import rospy
 import tf2_ros
 
@@ -62,7 +63,7 @@ class PathFollower():
         self.map_origin = -utils.se2_pose_from_pose(map.info.origin)  # negative because of weird way origin is stored
         print(self.map_origin)
         self.map_nonzero_idxes = np.argwhere(self.map_np)
-        print(map)
+        # print(map)
 
 
         # collisions
@@ -89,8 +90,8 @@ class PathFollower():
         cur_dir = os.path.dirname(os.path.realpath(__file__))
 
         # to use the temp hardcoded paths above, switch the comment on the following two lines
-        self.path_tuples = np.load(os.path.join(cur_dir, 'path.npy')).T
-        # self.path_tuples = np.array(TEMP_HARDCODE_PATH)
+        # self.path_tuples = np.load(os.path.join(cur_dir, 'path.npy')).T
+        self.path_tuples = np.array(TEMP_HARDCODE_PATH)
 
         self.path = utils.se2_pose_list_to_path(self.path_tuples, 'map')
         self.global_path_pub.publish(self.path)
@@ -129,32 +130,69 @@ class PathFollower():
             local_paths = np.zeros([self.horizon_timesteps + 1, self.num_opts, 3])
             local_paths[0] = np.atleast_2d(self.pose_in_map_np).repeat(self.num_opts, axis=0)
 
-            print("TO DO: Propogate the trajectory forward, storing the resulting points in local_paths!")
-            for t in range(1, self.horizon_timesteps + 1):
-                # propogate trajectory forward, assuming perfect control of velocity and no dynamic effects
-                pass
+            # print("TO DO: Propogate the trajectory forward, storing the resulting points in local_paths!")
+            # for t in range(1, self.horizon_timesteps + 1):
+            # propogate trajectory forward, assuming perfect control of velocity and no dynamic effects
+            start = self.pose_in_map_np
+            end = self.cur_goal
+            startX, startY, startTheta = start.flatten()
+            t = np.linspace(0, CONTROL_HORIZON, self.horizon_timesteps + 1, endpoint=True)
+            for opt in range(self.num_opts):
+                trajectory = np.zeros((self.horizon_timesteps + 1, 3))
+                vel, rot_vel = self.all_opts_scaled[opt]
+                if rot_vel == 0:  # moving straight
+                    trajectory[:, 0] = startX + vel * t * np.sin(startTheta)
+                    trajectory[:, 1] = startY - vel * t * np.cos(startTheta)
+                    trajectory[:, 2] = startTheta * np.ones(self.horizon_timesteps + 1)
+                else:  # moving along a curve
+                    radius = vel / rot_vel
+                    trajectory[:, 0] = startX + radius * (np.sin(startTheta + rot_vel * t) - np.sin(startTheta))
+                    trajectory[:, 1] = startY - radius * (np.cos(startTheta + rot_vel * t) - np.cos(startTheta))
+                    trajectory[:, 2] = startTheta + rot_vel * t
+
+                local_paths[:, opt] = trajectory
 
             # check all trajectory points for collisions
             # first find the closest collision point in the map to each local path point
             local_paths_pixels = (self.map_origin[:2] + local_paths[:, :, :2]) / self.map_resolution
-            valid_opts = range(self.num_opts)
+            # valid_opts = range(self.num_opts)
+            valid_opts = np.ones(self.num_opts, dtype=bool)
             local_paths_lowest_collision_dist = np.ones(self.num_opts) * 50
 
-            print("TO DO: Check the points in local_path_pixels for collisions")
+            # print("TO DO: Check the points in local_path_pixels for collisions")
             for opt in range(local_paths_pixels.shape[1]):
-                for timestep in range(local_paths_pixels.shape[0]):
-                    pass
+                valid = True
+                traj = local_paths_pixels[:, opt, :]
+                occ_points = self.points_to_obstacle_circle(traj[:, :2].T)
+                for i, (occ_rows, occ_cols) in enumerate(occ_points):
+                    if not np.all(self.map_np[occ_rows, occ_cols]):
+                        valid = False
+                        break
+                valid_opts[opt] = valid
 
             # remove trajectories that were deemed to have collisions
-            print("TO DO: Remove trajectories with collisions!")
+            # print("TO DO: Remove trajectories with collisions!")
+            # local_paths = local_paths[:, valid_opts, :]
 
             # calculate final cost and choose best option
             print("TO DO: Calculate the final cost and choose the best control option!")
             final_cost = np.zeros(self.num_opts)
+            for opt in range(local_paths.shape[1]):
+                if not valid_opts[opt]:
+                    final_cost[opt] = np.inf
+                    continue
+                traj = local_paths[:, opt, :]
+                final_pos = traj[-1, :2]
+                # TODO: Just manhattan dist for now but should make 
+                # it consider distance to obstacles, etc.
+                final_cost[opt] = cityblock(final_pos[:2], end[:2])
+
             if final_cost.size == 0:  # hardcoded recovery if all options have collision
                 control = [-.1, 0]
             else:
-                best_opt = valid_opts[final_cost.argmin()]
+                # best_opt = valid_opts[final_cost.argmin()]
+                # control = self.all_opts[best_opt]
+                best_opt = final_cost.argmin()
                 control = self.all_opts[best_opt]
                 self.local_path_pub.publish(utils.se2_pose_list_to_path(local_paths[:, best_opt], 'map'))
 
@@ -200,6 +238,26 @@ class PathFollower():
     def stop_robot_on_shutdown(self):
         self.cmd_pub.publish(Twist())
         rospy.loginfo("Published zero vel on shutdown.")
+
+    def points_to_obstacle_circle(self, points):
+        cell_coords = self.point_to_cell(points)
+        radius_cells = COLLISION_RADIUS / self.map_resolution
+        cells = [disk((x, y), radius_cells, shape=self.map_np.shape) for (x, y) in cell_coords.T]
+        # Returns an array of 2-array-tuples, first one containing row indices, second one containing column indices
+        return cells
+
+    def point_to_cell(self, point):
+        #Convert a series of [x,y] points in the map to the indices for the corresponding cell in the occupancy map
+        #point is a 2 by N matrix of points of interest
+        x, y, theta = self.map_origin
+        translated = point - np.array([[x], [y]])
+        rotated = translated
+        indices = np.round(rotated / self.map_resolution).astype(int)
+        # Switch x and y, since grid indexing is [row, col]
+        indices[[0, 1]] = indices[[1, 0]]
+        # Invert y axis
+        indices[0] = self.map_np.shape[0] - indices[0]
+        return indices
 
 
 if __name__ == '__main__':
