@@ -27,31 +27,41 @@ class PygameWindow:
         pygame.display.set_caption(name)
 
         self.size = size
+        self.goal_point = goal_point
+        self.stopping_dist = stopping_dist
         self.meters_per_pixel = map_settings_dict['resolution'] / self.size[0] * real_map_size_pixels[0]
         self.map_settings_dict = map_settings_dict
         self.origin = np.array(map_settings_dict['origin'])
 
-        map_img = pygame.image.load(str(MAPS_DIR / 'willowgarageworld_05res.png'))
-        map_img = pygame.transform.scale(map_img, self.size)
+        self.map_img = pygame.image.load(str(MAPS_DIR / 'willowgarageworld_05res.png'))
+        self.map_img = pygame.transform.scale(self.map_img, self.size)
 
         self.screen = pygame.display.set_mode(self.size)
-        self.screen.blit(map_img, (0, 0))
-        pygame.display.flip()
 
         full_map_height = map_settings_dict['resolution'] * real_map_size_pixels[1]
         # 80 + -49.25 since origin is relative to bottom left corner, but pygame 0, 0 is top left corner
         self.origin_pixels = np.array([-self.origin[0], full_map_height + self.origin[1]]) / self.meters_per_pixel
+        
+        self.clear()
+    
+    def clear(self):
+        self.screen.blit(self.map_img, (0, 0))
+        pygame.display.flip()
 
-        self.add_se2_pose([0, 0, 0], length=5, color=COLORS['r'])
-        self.add_point(goal_point.flatten(), radius=stopping_dist / self.meters_per_pixel, color=COLORS['g'])
+        self.add_se2_pose([0, 0, 0], length=5, color=COLORS['r'], update=False)
+        self.add_point(self.goal_point.flatten(), radius=self.stopping_dist / self.meters_per_pixel, color=COLORS['g'])
+    
+    def update(self):
+        pygame.display.update()
 
-    def add_point(self, map_frame_point, radius=1, width=0, color=COLORS['k']):
+    def add_point(self, map_frame_point, radius=1, width=0, color=COLORS['k'], update=True):
         map_frame_point[1] = -map_frame_point[1]  # for top left origin
         point_vec = self.point_to_vec(np.array(map_frame_point) / self.meters_per_pixel + self.origin_pixels)
         pygame.draw.circle(self.screen, color, point_vec, radius, width)
-        pygame.display.update()
+        if update:
+            pygame.display.update()
 
-    def add_se2_pose(self, map_frame_pose, length=1, width=0, color=COLORS['k']):
+    def add_se2_pose(self, map_frame_pose, length=1, width=0, color=COLORS['k'], update=True):
         map_frame_pose[1] = -map_frame_pose[1]  # for top left origin
         l = length
         p_center = np.array(map_frame_pose[:2]) / self.meters_per_pixel + self.origin_pixels
@@ -67,15 +77,17 @@ class PygameWindow:
         p2_vec = self.point_to_vec(p_2)
 
         pygame.draw.polygon(self.screen, color, [c_vec, p1_vec, p2_vec], width=width)
-        pygame.display.update()
+        if update:
+            pygame.display.update()
 
-    def add_line(self, map_frame_point1, map_frame_point2, width=1, color=COLORS['k']):
+    def add_line(self, map_frame_point1, map_frame_point2, width=1, color=COLORS['k'], update=True):
         map_frame_point1[1] = -map_frame_point1[1]  # for top left origin
         p1 = self.point_to_vec(np.array(map_frame_point1) / self.meters_per_pixel + self.origin_pixels)
         map_frame_point2[1] = -map_frame_point2[1]  # for top left origin
         p2 = self.point_to_vec(np.array(map_frame_point2) / self.meters_per_pixel + self.origin_pixels)
         pygame.draw.line(self.screen, color, p1, p2, width)
-        pygame.display.update()
+        if update:
+            pygame.display.update()
 
     # def remove_line(self, p1, p2, width=1, color=COLORS['w']):
     #     pygame.draw.line(self.screen, color, p1, p2, width)

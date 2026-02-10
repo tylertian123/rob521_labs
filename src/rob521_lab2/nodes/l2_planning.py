@@ -265,7 +265,7 @@ class PathPlanner:
         return min(self.gamma_RRT * (np.log(card_V) / card_V ) ** (1.0/2.0), self.epsilon)
     
     def nodes_within_radius(self, point, r):
-        dist = np.sum(np.square(self.node_pos_np[:2, :len(self.nodes)] - point[:2, :]), axis=0)
+        dist = np.sum(np.square(self.node_pos_np[:2, :len(self.nodes)] - point[:2].reshape(2, 1)), axis=0)
         return dist <= r**2
     
     def connect_node_to_point(self, node_i, point_f):
@@ -319,6 +319,18 @@ class PathPlanner:
             self.nodes[i].cost += cost_delta
             self.update_children(i, cost_delta)
 
+    def draw_tree(self):
+        self.window.clear()
+        stack = [0]
+        while stack:
+            i = stack.pop()
+            parent = self.nodes[i].parent_id
+            if parent >= 0:
+                self.window.add_line(self.nodes[parent].point[:2, 0].flatten(), self.nodes[i].point[:2, 0].flatten(), color=(255, 0, 255), update=False)
+            self.window.add_point(self.nodes[i].point[:2, 0].flatten(), color=(0, 255, 0), update=False)
+            stack.extend(self.nodes[i].children_ids)
+        self.window.update()
+
     #Planner Functions
     def rrt_planning(self, max_iter=150000, visualize=True):
         #This function performs RRT on the given map and robot
@@ -364,6 +376,8 @@ class PathPlanner:
         # Preallocate space for vectorized closest node computation
         self.node_pos_np = np.zeros((3, max_iter), dtype=np.float32)
         for iter_count in tqdm.trange(max_iter):
+            if visualize and iter_count % 100 == 0:
+                self.draw_tree()
             #Sample
             point = self.sample_map_space()
 
@@ -379,7 +393,7 @@ class PathPlanner:
             # Add the last point that didn't have a collision
             best_point = trajectory_o[:, safe_i]
             # Find optimal parent in neighbourhood
-            new_xy = best_point[:2] # Cut off theta for this one
+            new_xy = best_point[:2].reshape(2, 1) # Cut off theta for this one
             best_parent = closest_node_id
             # Tentative best cost, calculate using clipped path
             best_cost = self.nodes[closest_node_id].cost + self.cost_to_come(trajectory_o[:, :safe_i + 1])
@@ -452,8 +466,8 @@ def main():
 
     #RRT precursor
     path_planner = PathPlanner(map_filename, map_setings_filename, goal_point, stopping_dist)
-    # nodes = path_planner.rrt_star_planning()
-    nodes = path_planner.rrt_planning(max_iter=150000, visualize=True)
+    nodes = path_planner.rrt_star_planning()
+    # nodes = path_planner.rrt_planning(max_iter=150000, visualize=True)
     node_path_metric = np.hstack(path_planner.recover_path())
 
     #Leftover test functions
