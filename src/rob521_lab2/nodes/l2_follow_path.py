@@ -17,14 +17,13 @@ from visualization_msgs.msg import Marker
 # ros and se2 conversion utils
 import utils
 
-
 TRANS_GOAL_TOL = .1  # m, tolerance to consider a goal complete
 ROT_GOAL_TOL = .3  # rad, tolerance to consider a goal complete
 TRANS_VEL_OPTS = [0, 0.025, 0.13, 0.26]  # m/s, max of real robot is .26
 ROT_VEL_OPTS = np.linspace(-1.82, 1.82, 11)  # rad/s, max of real robot is 1.82
 CONTROL_RATE = 5  # Hz, how frequently control signals are sent
 CONTROL_HORIZON = 2  # seconds. if this is set too high and INTEGRATION_DT is too low, code will take a long time to run!
-INTEGRATION_DT = .2  # s, delta t to propagate trajectories forward by
+INTEGRATION_DT = .1  # s, delta t to propagate trajectories forward by
 COLLISION_RADIUS = 0.225  # m, radius from base_link to use for collisions, min of 0.2077 based on dimensions of .281 x .306
 ROT_DIST_MULT = .1  # multiplier to change effect of rotational distance in choosing correct control
 OBS_DIST_MULT = .1  # multiplier to change the effect of low distance to obstacles on a path
@@ -160,9 +159,9 @@ class PathFollower():
 
             print("TO DO: Check the points in local_path_pixels for collisions")
             for opt in range(local_paths_pixels.shape[1]):
-                occ_points = self.point_to_robot_circle(local_paths_pixels[:, opt].T)
+                occ_points = self.pixels_to_robot_circle(local_paths_pixels[:, opt, :])
                 for i, (occ_rows, occ_cols) in enumerate(occ_points):
-                    if np.any(self.map_np[occ_rows, occ_cols]):
+                    if np.any(self.map_np[occ_cols, occ_rows]):
                         valid_opts[opt] = False
                         break
 
@@ -237,23 +236,6 @@ class PathFollower():
         self.cmd_pub.publish(Twist())
         rospy.loginfo("Published zero vel on shutdown.")
 
-    def trajectory_footprint_mask(self, points):
-        cell_coords = self.point_to_cell(points)
-        traj_footprint = np.zeros_like(self.map_np, dtype=bool)
-        for (x, y) in cell_coords.T:
-            rr, cc = disk((x, y), self.collision_radius_pix, shape=self.map_np.shape)
-            traj_footprint[rr, cc] = True
-        # returns array the size of the map with True for cells that are within the collision radius of any point in the trajectory
-        return traj_footprint
-
-    def trajectory_footprint_mask_from_pixels(self, pixels):
-        traj_footprint = np.zeros_like(self.map_np, dtype=bool)
-        for (x, y) in pixels:
-            rr, cc = disk((x, y), self.collision_radius_pix, shape=self.map_np.shape)
-            traj_footprint[rr, cc] = True
-        # returns array the size of the map with True for cells that are within the collision radius of any point in the trajectory
-        return traj_footprint
-
     def pixels_to_robot_circle(self, pixels):
         #Convert a series of [x,y] points to robot map footprints for collision detection
         #Hint: The disk function is included to help you with this function
@@ -261,28 +243,6 @@ class PathFollower():
         cells = [disk((x, y), radius_cells, shape=self.map_np.shape) for (x, y) in pixels]
         # Returns an array of 2-array-tuples, first one containing row indices, second one containing column indices
         return cells
-
-    def point_to_robot_circle(self, points):
-        #Convert a series of [x,y] points to robot map footprints for collision detection
-        #Hint: The disk function is included to help you with this function
-        cell_coords = self.point_to_cell(points)
-        radius_cells = self.collision_radius_pix
-        cells = [disk((x, y), radius_cells, shape=self.map_np.shape) for (x, y) in cell_coords.T]
-        # Returns an array of 2-array-tuples, first one containing row indices, second one containing column indices
-        return cells
-
-    def point_to_cell(self, point):
-        #Convert a series of [x,y] points in the map to the indices for the corresponding cell in the occupancy map
-        #point is a 2 by N matrix of points of interest
-        x, y, theta = self.map_origin
-        translated = point - np.array([[x], [y]])
-        rotated = translated
-        indices = np.round(rotated / self.map_resolution).astype(int)
-        # Switch x and y, since grid indexing is [row, col]
-        indices[[0, 1]] = indices[[1, 0]]
-        # Invert y axis
-        indices[0] = self.map_np.shape[0] - indices[0]
-        return indices
 
 
 if __name__ == '__main__':
