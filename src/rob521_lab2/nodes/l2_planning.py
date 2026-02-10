@@ -231,7 +231,7 @@ class PathPlanner:
         """
         Performs collision checking along a path.
         Returns the index of the last "safe" point within traj.
-        If len(traj) - 1 is returned, the entire trajectory is collision-free.
+        If traj.shape[1] - 1 is returned, the entire trajectory is collision-free.
         If -1 is returned, none of the points are collision-free.
         
         :param traj: 2xN or 3xN array of the trajectory.
@@ -433,13 +433,13 @@ class PathPlanner:
                 break
         else:
             raise RuntimeError(f"No path found after {iter_count + 1} iterations!")
-        return self.nodes
+        return len(self.nodes) - 1
     
     def rrt_star_planning(self, max_iter=150000, visualize=True):
         #This function performs RRT* for the given map and robot
         # Preallocate space for vectorized closest node computation
         self.node_pos_np = np.zeros((3, max_iter + 1), dtype=np.float32)
-        path_found = False
+        goal_node = -1
         for iter_count in tqdm.trange(max_iter):
             if visualize and iter_count % 100 == 0:
                 self.draw_tree()
@@ -501,15 +501,14 @@ class PathPlanner:
                     # Magically propagate cost?
                     self.update_children(i, cost_delta)
 
-
-            if not path_found and \
+            if not goal_node == -1 and \
                 np.hypot(self.goal_point[0, 0] - self.nodes[-1].point[0, 0],
                          self.goal_point[1, 0] - self.nodes[-1].point[1, 0]) <= self.stopping_dist:
                 print(f"Path found after {iter_count + 1} iterations")
-                path_found = True
-        if not path_found:
+                goal_node = len(self.nodes) - 1
+        if goal_node == -1:
             raise RuntimeError(f"No path found after {iter_count + 1} iterations!")
-        return self.nodes
+        return goal_node
     
     def recover_path(self, node_id = -1):
         path = [self.nodes[node_id].point]
@@ -532,9 +531,8 @@ def main():
 
     #RRT precursor
     path_planner = PathPlanner(map_filename, map_setings_filename, goal_point, stopping_dist)
-    nodes = path_planner.rrt_planning()
-    # nodes = path_planner.rrt_planning(max_iter=150000, visualize=True)
-    node_path_metric = np.hstack(path_planner.recover_path())
+    goal_node = path_planner.rrt_planning()
+    node_path_metric = np.hstack(path_planner.recover_path(goal_node))
 
     #Leftover test functions
     np.save("shortest_path.npy", node_path_metric)
