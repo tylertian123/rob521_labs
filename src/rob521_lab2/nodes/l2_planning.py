@@ -266,7 +266,7 @@ class PathPlanner:
     
     def nodes_within_radius(self, point, r):
         dist = np.sum(np.square(self.node_pos_np[:2, :len(self.nodes)] - point[:2].reshape(2, 1)), axis=0)
-        return dist <= r**2
+        return np.nonzero(dist <= r**2)[0]
     
     def connect_node_to_point(self, node_i, point_f):
         # NOTE: returns None if the connection is not possible within our timestep constraints
@@ -410,7 +410,7 @@ class PathPlanner:
                 if self.nodes[i].cost + edge_cost < best_cost:
                     best_cost = self.nodes[i].cost + edge_cost
                     best_parent = i
-                    best_point = traj[-1]
+                    best_point[2] = traj[2, -1]
             # Wire to optimal parent
             self.add_node(Node(best_point, best_parent, best_cost))
 
@@ -432,7 +432,7 @@ class PathPlanner:
                     self.nodes[-1].children_ids.append(i)
                     self.nodes[i].parent_id = len(self.nodes) - 1
                     self.nodes[i].cost = new_cost
-                    self.nodes[i].point = traj[-1]
+                    self.nodes[i].point[2, 0] = traj[2, -1]
                     # Magically propagate cost?
                     self.update_children(i, cost_delta)
 
