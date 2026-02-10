@@ -285,12 +285,11 @@ class PathPlanner:
             r = (dxv**2 + dyv**2) / (2 * dyv)
             # angle of arc
             a = 2 * np.arcsin(np.hypot(dxv, dyv) / (2 * r))
-            # Calculate required omega to get there in our time step
-            omega = a / self.timestep
-            if abs(omega) > self.rot_vel_max:
-                return None
+
+            T = max(a / self.rot_vel_max, np.hypot(dxv, dyv) / self.vel_max)
+            omega = a / T
             v = omega * r
-            if abs(v) > self.vel_max:
+            if abs(omega) > self.rot_vel_max or abs(v) > self.vel_max:
                 return None
         else:
             omega = 0
@@ -299,6 +298,71 @@ class PathPlanner:
                 return None
         return self.trajectory_rollout(v, omega, node_i)
     
+    def connect_node_to_point_v2(self, node_i, point_f):
+        # Transform target into robot frame
+        dx = point_f[0, 0] - node_i[0, 0]
+        dy = point_f[1, 0] - node_i[1, 0]
+        theta = node_i[2, 0]
+
+        c, s = np.cos(theta), np.sin(theta)
+        x_r =  c * dx + s * dy
+        y_r = -s * dx + c * dy
+
+        dist = np.hypot(x_r, y_r)
+        if dist < 1e-3:
+            return None
+
+        best_traj = None
+        best_time = np.inf
+
+        omegas = np.linspace(-self.rot_vel_max, self.rot_vel_max, 11)
+
+        for omega in omegas:
+            if abs(omega) < 1e-3:
+                # Straight line case
+                v = x_r / self.timestep
+                if abs(v) > self.vel_max or abs(y_r) > 0.1:
+                    continue
+                T = abs(x_r / v)
+            else:
+                # Circular arc case
+                r = (x_r**2 + y_r**2) / (2 * y_r) if abs(y_r) > 1e-6 else None
+                if r is None:
+                    continue
+                arc_angle = np.arctan2(x_r, r - y_r)
+                T = abs(arc_angle / omega)
+                v = omega * r
+                if abs(v) > self.vel_max or T <= 0:
+                    continue
+
+            # Limit traje len
+            if T > 3.0:
+                continue
+
+            steps = max(5, int(self.num_substeps * T / self.timestep))
+            traj = np.zeros((3, steps))
+            ts = np.linspace(0, T, steps)
+            x0, y0, th0 = node_i.flatten()
+
+            if abs(omega) < 1e-3:
+                traj[0, :] = x0 + v * ts * np.cos(th0)
+                traj[1, :] = y0 + v * ts * np.sin(th0)
+                traj[2, :] = th0
+            else:
+                r = v / omega
+                traj[0, :] = x0 + r * (np.sin(th0 + omega * ts) - np.sin(th0))
+                traj[1, :] = y0 - r * (np.cos(th0 + omega * ts) - np.cos(th0))
+                traj[2, :] = th0 + omega * ts
+
+            if np.linalg.norm(traj[:2, -1] - point_f.flatten()) > 0.2:
+                continue
+
+            if T < best_time:
+                best_time = T
+                best_traj = traj
+
+        return best_traj
+
     def cost_to_come(self, trajectory_o):
         #The cost to get to a node from lavalle 
         # Sum Euclidean distance between nodes
