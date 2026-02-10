@@ -384,7 +384,7 @@ class PathPlanner:
             self.update_children(i, cost_delta)
 
     def draw_tree(self):
-        self.window.clear()
+        self.window.clear(update=False)
         stack = [0]
         while stack:
             i = stack.pop()
@@ -469,7 +469,7 @@ class PathPlanner:
                     continue
                 traj = self.connect_node_to_point(self.nodes[i].point, new_xy)
                 # Collision check to make sure the entire trajectory is collision-free
-                if traj is None or self.collision_check(traj) != len(traj) - 1:
+                if traj is None or self.collision_check(traj) != traj.shape[1] - 1:
                     continue
                 edge_cost = self.cost_to_come(traj)
                 if self.nodes[i].cost + edge_cost < best_cost:
@@ -485,7 +485,7 @@ class PathPlanner:
                     continue
                 # Collision check
                 traj = self.connect_node_to_point(self.nodes[-1].point, self.nodes[i].point[:2])
-                if traj is None or self.collision_check(traj) != len(traj) - 1:
+                if traj is None or self.collision_check(traj) != traj.shape[1] - 1:
                     continue
                 edge_cost = self.cost_to_come(traj)
                 # Rewire
@@ -531,7 +531,7 @@ def main():
 
     #RRT precursor
     path_planner = PathPlanner(map_filename, map_setings_filename, goal_point, stopping_dist)
-    goal_node = path_planner.rrt_planning()
+    goal_node = path_planner.rrt_star_planning()
     node_path_metric = np.hstack(path_planner.recover_path(goal_node))
 
     #Leftover test functions

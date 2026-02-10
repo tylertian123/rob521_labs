@@ -48,12 +48,13 @@ class PygameWindow:
         
         self.clear()
     
-    def clear(self):
+    def clear(self, update=True):
         self.screen.blit(self.map_img, (0, 0))
-        pygame.display.flip()
 
         self.add_se2_pose([0, 0, 0], length=5, color=COLORS['r'], update=False)
-        self.add_point(self.goal_point.flatten(), radius=self.stopping_dist / self.meters_per_pixel, color=COLORS['g'])
+        self.add_point(self.goal_point.flatten(), radius=self.stopping_dist / self.meters_per_pixel, color=COLORS['g'], update=False)
+        if update:
+            pygame.display.flip()
     
     def update(self):
         pygame.display.update()
