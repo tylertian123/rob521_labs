@@ -139,9 +139,9 @@ class PathFollower():
             trajectory = np.zeros((self.horizon_timesteps + 1, 3))
             for opt in range(self.num_opts):
                 vel, rot_vel = self.all_opts[opt]
-                if rot_vel == 0:  # moving straight
-                    trajectory[:, 0] = startX + vel * t * np.sin(startTheta)
-                    trajectory[:, 1] = startY - vel * t * np.cos(startTheta)
+                if abs(rot_vel) < 1e-8:  # moving straight
+                    trajectory[:, 0] = startX + vel * t * np.cos(startTheta)
+                    trajectory[:, 1] = startY - vel * t * np.sin(startTheta)
                     trajectory[:, 2] = startTheta * np.ones(self.horizon_timesteps + 1)
                 else:  # moving along a curve
                     radius = vel / rot_vel

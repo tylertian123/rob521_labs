@@ -185,14 +185,13 @@ class PathPlanner:
         trajectory = np.zeros((3, self.num_substeps))
         steps = np.linspace(0, self.timestep, self.num_substeps)
 
-        if rot_vel == 0:  # moving straight
-            trajectory[0, :] = startX + vel * steps * np.sin(startTheta)
-            trajectory[1, :] = startY + vel * steps * np.cos(startTheta)
+        if abs(rot_vel) < 1e-8:  # moving straight
+            trajectory[0, :] = startX + vel * steps * np.cos(startTheta)
+            trajectory[1, :] = startY + vel * steps * np.sin(startTheta)
             trajectory[2, :] = startTheta * np.ones(self.num_substeps)
         else:  # moving along a curve
             radius = vel / rot_vel
             trajectory[0, :] = startX + radius * (np.sin(startTheta + rot_vel * steps) - np.sin(startTheta))
-            ## NOTE: MAYBE THE SIGN IS WRONG FOR Y? CHECK WHEN TESTING
             trajectory[1, :] = startY - radius * (np.cos(startTheta + rot_vel * steps) - np.cos(startTheta))
             trajectory[2, :] = startTheta + rot_vel * steps
 
