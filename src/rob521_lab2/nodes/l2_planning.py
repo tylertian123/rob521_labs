@@ -175,7 +175,7 @@ class PathPlanner:
 
         return linear_vel, rot_vel
     
-    def trajectory_rollout(self, vel, rot_vel, point):
+    def trajectory_rollout(self, vel, rot_vel, point, time=None):
         # Given your chosen velocities determine the trajectory of the robot for your given timestep
         # The returned trajectory should be a series of points to check for collisions
 
@@ -183,7 +183,7 @@ class PathPlanner:
         # preallocated trajectory and steps (x, y, theta)
         startX, startY, startTheta = point.flatten()
         trajectory = np.zeros((3, self.num_substeps))
-        steps = np.linspace(0, self.timestep, self.num_substeps)
+        steps = np.linspace(0, time or self.timestep, self.num_substeps)
 
         if abs(rot_vel) < 1e-8:  # moving straight
             trajectory[0, :] = startX + vel * steps * np.cos(startTheta)
@@ -273,6 +273,10 @@ class PathPlanner:
         #Settings
         #node is a 3 by 1 node
         #point is a 2 by 1 point
+        if abs(self.angle_to_goal(node_i, point_f)) > np.pi / 2:
+            return None
+    
+        max_time = self.timestep * 3
         dx = point_f[0, 0] - node_i[0, 0]
         dy = point_f[1, 0] - node_i[1, 0]
         # Rotate into vehicle frame
@@ -287,17 +291,20 @@ class PathPlanner:
             arg = np.clip(arg, -1.0, 1.0)
             a = 2 * np.arcsin(arg)
 
-            T = max(a / self.rot_vel_max, np.hypot(dxv, dyv) / self.vel_max)
-            omega = a / T
-            v = omega * r
-            if abs(omega) > self.rot_vel_max or abs(v) > self.vel_max:
+            max_omega = min(self.rot_vel_max, self.vel_max / r)
+            t = a / max_omega
+            if t > max_time:
                 return None
+            
+            omega = np.copysign(max_omega, dyv)
+            v = max_omega * r
         else:
             omega = 0
-            v = dxv / self.timestep
-            if abs(v) > self.vel_max:
+            v = self.vel_max
+            t = dxv / self.vel_max
+            if t > max_time:
                 return None
-        return self.trajectory_rollout(v, omega, node_i)
+        return self.trajectory_rollout(v, omega, node_i, t)
     
     def connect_node_to_point_v2(self, node_i, point_f):
         # Transform target into robot frame
