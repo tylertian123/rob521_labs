@@ -483,6 +483,17 @@ class PathPlanner:
             self.tree_bounds[1, 1] = np.max(self.node_pos_np[1])
             print(f"State loaded, starting from iteration {iter_start + 1}, with {len(self.nodes)} nodes, goal {'found' if goal_node != -1 else 'not found'}")
 
+        def save_state():
+            if save_to is not None:
+                state = {
+                    "nodes": self.nodes,
+                    "goal_node": goal_node,
+                    "iter_count": iter_count
+                }
+                with open(save_to, "wb") as f:
+                    pickle.dump(state, f, protocol=pickle.HIGHEST_PROTOCOL)
+                print("Saved state to", save_to)
+
         iter_count = 0
         try:
             for iter_count in tqdm.trange(iter_start, max_iter):
@@ -552,18 +563,10 @@ class PathPlanner:
                             self.nodes[i].point[2, 0] = traj[2, -1]
                             # Magically propagate cost?
                             self.update_children(i, cost_delta)
-        except KeyboardInterrupt:
-            if save_to is not None:
-                state = {
-                    "nodes": self.nodes,
-                    "goal_node": goal_node,
-                    "iter_count": iter_count
-                }
-                with open(save_to, "wb") as f:
-                    pickle.dump(state, f, protocol=pickle.HIGHEST_PROTOCOL)
-                print("Saved state to", save_to)
-                sys.exit(0)
-            raise
+            self.draw_tree()
+        finally:
+            save_state()
+
         if goal_node == -1:
             raise RuntimeError(f"No path found after {iter_count + 1} iterations!")
         return goal_node
@@ -576,6 +579,11 @@ class PathPlanner:
             current_node_id = self.nodes[current_node_id].parent_id
         path.reverse()
         return path
+
+    def draw_shortest_path(self, node_id=-1):
+        path = self.recover_path(node_id)
+        for i in range(len(path) - 1):
+            self.window.add_line(path[i].ravel()[:2], path[i + 1].ravel()[:2], width=2, color=(255, 0, 0))
 
 def main():
     np.random.seed(0)
@@ -599,10 +607,11 @@ def main():
         state = None
 
     goal_node = path_planner.rrt_star_planning(load_state=state, save_to=save_path)
+    path_planner.draw_shortest_path(goal_node)
     node_path_metric = np.hstack(path_planner.recover_path(goal_node))
 
     #Leftover test functions
-    np.save("shortest_path.npy", node_path_metric)
+    np.save("shortest_path_rrtstar.npy", node_path_metric)
     input("Done. Press enter to exit.")
 
 
