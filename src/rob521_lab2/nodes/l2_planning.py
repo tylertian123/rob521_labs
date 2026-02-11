@@ -535,7 +535,7 @@ class PathPlanner:
                 # Wire to optimal parent
                 with DelayedKeyboardInterrupt():
                     self.add_node(Node(best_point, best_parent, best_cost))
-                    if not goal_node == -1 and \
+                    if goal_node == -1 and \
                         np.hypot(self.goal_point[0, 0] - self.nodes[-1].point[0, 0],
                                 self.goal_point[1, 0] - self.nodes[-1].point[1, 0]) <= self.stopping_dist:
                         print(f"Path found after {iter_count + 1} iterations")
@@ -583,7 +583,7 @@ class PathPlanner:
     def draw_shortest_path(self, node_id=-1):
         path = self.recover_path(node_id)
         for i in range(len(path) - 1):
-            self.window.add_line(path[i].ravel()[:2], path[i + 1].ravel()[:2], width=2, color=(255, 0, 0))
+            self.window.add_line(path[i].flatten()[:2], path[i + 1].flatten()[:2], width=2, color=(255, 0, 0))
 
 def main():
     np.random.seed(0)
