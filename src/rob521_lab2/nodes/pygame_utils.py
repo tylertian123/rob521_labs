@@ -1,5 +1,7 @@
 import numpy as np
 import pygame
+from threading import Thread
+import time
 # from pygame.locals import *
 
 from pathlib import Path
@@ -26,6 +28,13 @@ class PygameWindow:
 
         pygame.init()
         pygame.display.set_caption(name)
+
+        def _pump():
+            while True:
+                pygame.event.pump()
+                time.sleep(1)
+        self.pump_thread = Thread(target=_pump, daemon=True)
+        self.pump_thread.start()
 
         width = size
         height = np.round(real_map_size_pixels[0] / real_map_size_pixels[1] * width).astype(int)
