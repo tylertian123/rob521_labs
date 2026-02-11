@@ -4,11 +4,31 @@ import numpy as np
 import yaml
 import pygame
 import time
+import pickle
+import sys
 import tqdm
 import pygame_utils
 import matplotlib.image as mpimg
 from skimage.draw import disk
 from scipy.linalg import block_diag
+
+import signal
+import logging
+
+class DelayedKeyboardInterrupt:
+
+    def __enter__(self):
+        self.signal_received = False
+        self.old_handler = signal.signal(signal.SIGINT, self.handler)
+                
+    def handler(self, sig, frame):
+        self.signal_received = (sig, frame)
+        logging.debug('SIGINT received. Delaying KeyboardInterrupt.')
+    
+    def __exit__(self, type, value, traceback):
+        signal.signal(signal.SIGINT, self.old_handler)
+        if self.signal_received:
+            self.old_handler(*self.signal_received)
 
 from pathlib import Path
 
@@ -443,77 +463,107 @@ class PathPlanner:
             raise RuntimeError(f"No path found after {iter_count + 1} iterations!")
         return len(self.nodes) - 1
     
-    def rrt_star_planning(self, max_iter=150000, visualize=True):
+    def rrt_star_planning(self, max_iter=150000, visualize=True, load_state=None, save_to=None):
         #This function performs RRT* for the given map and robot
-        # Preallocate space for vectorized closest node computation
-        self.node_pos_np = np.zeros((3, max_iter + 1), dtype=np.float32)
-        goal_node = -1
-        for iter_count in tqdm.trange(max_iter):
-            if visualize and iter_count % 100 == 0:
-                self.draw_tree()
-            #Sample
-            point = self.sample_map_space()
+        if load_state is None:
+            # Preallocate space for vectorized closest node computation
+            self.node_pos_np = np.zeros((3, max_iter + 1), dtype=np.float32)
+            goal_node = -1
+            iter_start = 0
+        else:
+            goal_node = load_state["goal_node"]
+            iter_start = load_state["iter_count"]
+            self.nodes = load_state["nodes"]
+            self.node_pos_np = np.empty((3, max(len(self.nodes), max_iter + 1)))
+            for i, node in enumerate(self.nodes):
+                self.node_pos_np[:, i] = node.point.ravel()
+            self.tree_bounds[0, 0] = np.min(self.node_pos_np[0])
+            self.tree_bounds[0, 1] = np.max(self.node_pos_np[0])
+            self.tree_bounds[1, 0] = np.min(self.node_pos_np[1])
+            self.tree_bounds[1, 1] = np.max(self.node_pos_np[1])
+            print(f"State loaded, starting from iteration {iter_start + 1}, with {len(self.nodes)} nodes, goal {'found' if goal_node != -1 else 'not found'}")
 
-            #Closest Node
-            closest_node_id = self.closest_node(point)
+        iter_count = 0
+        try:
+            for iter_count in tqdm.trange(iter_start, max_iter):
+                if visualize and iter_count % 100 == 0:
+                    self.draw_tree()
+                #Sample
+                point = self.sample_map_space()
 
-            #Simulate trajectory
-            trajectory_o = self.simulate_trajectory(self.nodes[closest_node_id].point, point)
+                #Closest Node
+                closest_node_id = self.closest_node(point)
 
-            #Check for collisions
-            safe_i = self.collision_check(trajectory_o)
+                #Simulate trajectory
+                trajectory_o = self.simulate_trajectory(self.nodes[closest_node_id].point, point)
 
-            # Add the last point that didn't have a collision
-            best_point = trajectory_o[:, safe_i]
-            # Find optimal parent in neighbourhood
-            new_xy = best_point[:2].reshape(2, 1) # Cut off theta for this one
-            best_parent = closest_node_id
-            # Tentative best cost, calculate using clipped path
-            best_cost = self.nodes[closest_node_id].cost + self.cost_to_come(trajectory_o[:, :safe_i + 1])
-            # Find everything within the radius
-            indices = self.nodes_within_radius(new_xy, self.ball_radius())
-            for i in indices:
-                if i == closest_node_id:
-                    continue
-                traj = self.connect_node_to_point(self.nodes[i].point, new_xy)
-                # Collision check to make sure the entire trajectory is collision-free
-                if traj is None or self.collision_check(traj) != traj.shape[1] - 1:
-                    continue
-                edge_cost = self.cost_to_come(traj)
-                if self.nodes[i].cost + edge_cost < best_cost:
-                    best_cost = self.nodes[i].cost + edge_cost
-                    best_parent = i
-                    best_point[2] = traj[2, -1]
-            # Wire to optimal parent
-            self.add_node(Node(best_point, best_parent, best_cost))
+                #Check for collisions
+                safe_i = self.collision_check(trajectory_o)
 
-            #Close node rewire
-            for i in indices:
-                if i == closest_node_id:
-                    continue
-                # Collision check
-                traj = self.connect_node_to_point(self.nodes[-1].point, self.nodes[i].point[:2])
-                if traj is None or self.collision_check(traj) != traj.shape[1] - 1:
-                    continue
-                edge_cost = self.cost_to_come(traj)
-                # Rewire
-                new_cost = self.nodes[-1].cost + edge_cost
-                if new_cost < self.nodes[i].cost:
-                    cost_delta = new_cost - self.nodes[i].cost
-                    old_parent = self.nodes[i].parent_id
-                    self.nodes[old_parent].children_ids.remove(i)
-                    self.nodes[-1].children_ids.append(i)
-                    self.nodes[i].parent_id = len(self.nodes) - 1
-                    self.nodes[i].cost = new_cost
-                    self.nodes[i].point[2, 0] = traj[2, -1]
-                    # Magically propagate cost?
-                    self.update_children(i, cost_delta)
+                # Add the last point that didn't have a collision
+                best_point = trajectory_o[:, safe_i]
+                # Find optimal parent in neighbourhood
+                new_xy = best_point[:2].reshape(2, 1) # Cut off theta for this one
+                best_parent = closest_node_id
+                # Tentative best cost, calculate using clipped path
+                best_cost = self.nodes[closest_node_id].cost + self.cost_to_come(trajectory_o[:, :safe_i + 1])
+                # Find everything within the radius
+                indices = self.nodes_within_radius(new_xy, self.ball_radius())
+                for i in indices:
+                    if i == closest_node_id:
+                        continue
+                    traj = self.connect_node_to_point(self.nodes[i].point, new_xy)
+                    # Collision check to make sure the entire trajectory is collision-free
+                    if traj is None or self.collision_check(traj) != traj.shape[1] - 1:
+                        continue
+                    edge_cost = self.cost_to_come(traj)
+                    if self.nodes[i].cost + edge_cost < best_cost:
+                        best_cost = self.nodes[i].cost + edge_cost
+                        best_parent = i
+                        best_point[2] = traj[2, -1]
+                # Wire to optimal parent
+                with DelayedKeyboardInterrupt():
+                    self.add_node(Node(best_point, best_parent, best_cost))
+                    if not goal_node == -1 and \
+                        np.hypot(self.goal_point[0, 0] - self.nodes[-1].point[0, 0],
+                                self.goal_point[1, 0] - self.nodes[-1].point[1, 0]) <= self.stopping_dist:
+                        print(f"Path found after {iter_count + 1} iterations")
+                        goal_node = len(self.nodes) - 1
 
-            if not goal_node == -1 and \
-                np.hypot(self.goal_point[0, 0] - self.nodes[-1].point[0, 0],
-                         self.goal_point[1, 0] - self.nodes[-1].point[1, 0]) <= self.stopping_dist:
-                print(f"Path found after {iter_count + 1} iterations")
-                goal_node = len(self.nodes) - 1
+                #Close node rewire
+                for i in indices:
+                    if i == closest_node_id:
+                        continue
+                    # Collision check
+                    traj = self.connect_node_to_point(self.nodes[-1].point, self.nodes[i].point[:2])
+                    if traj is None or self.collision_check(traj) != traj.shape[1] - 1:
+                        continue
+                    edge_cost = self.cost_to_come(traj)
+                    # Rewire
+                    new_cost = self.nodes[-1].cost + edge_cost
+                    if new_cost < self.nodes[i].cost:
+                        with DelayedKeyboardInterrupt():
+                            cost_delta = new_cost - self.nodes[i].cost
+                            old_parent = self.nodes[i].parent_id
+                            self.nodes[old_parent].children_ids.remove(i)
+                            self.nodes[-1].children_ids.append(i)
+                            self.nodes[i].parent_id = len(self.nodes) - 1
+                            self.nodes[i].cost = new_cost
+                            self.nodes[i].point[2, 0] = traj[2, -1]
+                            # Magically propagate cost?
+                            self.update_children(i, cost_delta)
+        except KeyboardInterrupt:
+            if save_to is not None:
+                state = {
+                    "nodes": self.nodes,
+                    "goal_node": goal_node,
+                    "iter_count": iter_count
+                }
+                with open(save_to, "wb") as f:
+                    pickle.dump(state, f, protocol=pickle.HIGHEST_PROTOCOL)
+                print("Saved state to", save_to)
+                sys.exit(0)
+            raise
         if goal_node == -1:
             raise RuntimeError(f"No path found after {iter_count + 1} iterations!")
         return goal_node
@@ -539,7 +589,16 @@ def main():
 
     #RRT precursor
     path_planner = PathPlanner(map_filename, map_setings_filename, goal_point, stopping_dist)
-    goal_node = path_planner.rrt_star_planning()
+
+    # Load saved state
+    save_path = Path("rrtstar_state.pkl")
+    if save_path.exists():
+        with open(save_path, "rb") as f:
+            state = pickle.load(f)
+    else:
+        state = None
+
+    goal_node = path_planner.rrt_star_planning(load_state=state, save_to=save_path)
     node_path_metric = np.hstack(path_planner.recover_path(goal_node))
 
     #Leftover test functions
