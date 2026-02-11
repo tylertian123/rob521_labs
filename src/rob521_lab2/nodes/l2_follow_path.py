@@ -154,7 +154,6 @@ class PathFollower():
             # check all trajectory points for collisions
             # first find the closest collision point in the map to each local path point
             local_paths_pixels = (self.map_origin[:2] + local_paths[:, :, :2]) / self.map_resolution
-            local_paths_pixels[[0, 1]] = local_paths_pixels[[1, 0]]
             # valid_opts = range(self.num_opts)
             valid_opts = np.ones(self.num_opts, dtype=bool)
             local_paths_lowest_collision_dist = np.ones(self.num_opts) * 50
@@ -239,7 +238,7 @@ class PathFollower():
         #Convert a series of [x,y] points to robot map footprints for collision detection
         pixels = np.round(pixels).astype(int)
         yield from ((np.clip(self.precomputed_disk[0] + row, 0, self.map_np.shape[0] - 1),
-                     np.clip(self.precomputed_disk[1] + col, 0, self.map_np.shape[1] - 1)) for (row, col) in pixels)
+                     np.clip(self.precomputed_disk[1] + col, 0, self.map_np.shape[1] - 1)) for (col, row) in pixels)
         # Returns an array of 2-array-tuples, first one containing row indices, second one containing column indices
 
 
