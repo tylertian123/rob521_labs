@@ -179,4 +179,7 @@ dmypy.json
 bags/
 *.bag
 
+*.npy
+*.pkl
+
 *.pdf
