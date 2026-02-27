@@ -77,6 +77,12 @@ class wheelBaselineEstimator():
             # # YOUR CODE HERE!!!
             # Calculate the radius of the wheel based on encoder measurements
 
+            # Explanation: Circumference of circle is pi * diameter. Diameter represents
+            # the separation and circumference represents the distance traveled by the wheel.
+            # If the robot does n rotations, then each wheel must move distance n * pi * diameter
+            # From encoder, we have distance = encoder_ticks / ticks_per_rotation * (2 * pi * radius)
+            # Therefore, diameter = distance / (n * pi) for each wheel which we can combine together 
+            # to get separation = (distanceLeft + distanceRight) / (2 * n * pi)
             distanceLeft = (self.del_left_encoder / TICKS_PER_ROTATION) * (2 * np.pi * WHEEL_RADIUS)
             distanceRight = (self.del_right_encoder / TICKS_PER_ROTATION) * (2 * np.pi * WHEEL_RADIUS)
             separation = (distanceLeft + distanceRight) / (2 * NUM_ROTATIONS * np.pi)
