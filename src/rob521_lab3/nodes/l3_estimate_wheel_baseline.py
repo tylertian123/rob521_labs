@@ -83,8 +83,8 @@ class wheelBaselineEstimator():
             # From encoder, we have distance = encoder_ticks / ticks_per_rotation * (2 * pi * radius)
             # Therefore, diameter = distance / (n * pi) for each wheel which we can combine together 
             # to get separation = (distanceLeft + distanceRight) / (2 * n * pi)
-            distanceLeft = (self.del_left_encoder / TICKS_PER_ROTATION) * (2 * np.pi * WHEEL_RADIUS)
-            distanceRight = (self.del_right_encoder / TICKS_PER_ROTATION) * (2 * np.pi * WHEEL_RADIUS)
+            distanceLeft = np.abs((self.del_left_encoder / TICKS_PER_ROTATION) * (2 * np.pi * WHEEL_RADIUS))
+            distanceRight = np.abs((self.del_right_encoder / TICKS_PER_ROTATION) * (2 * np.pi * WHEEL_RADIUS))
             separation = (distanceLeft + distanceRight) / (2 * NUM_ROTATIONS * np.pi)
 
             print('Calibrated Separation: {} m'.format(separation))
