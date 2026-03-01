@@ -13,13 +13,13 @@ TICKS_PER_ROTATION = 4096
 WHEEL_RADIUS = 0.066 / 2 #In meters
 
 
-class wheelBaselineEstimator():
+class WheelBaselineEstimator():
     def __init__(self):
-        rospy.init_node('encoder_data', anonymous=True) # Initialize node
+        rospy.init_node('wheel_baseline_estimator', anonymous=True) # Initialize node
 
         #Subscriber bank
-        rospy.Subscriber("cmd_vel", Twist, self.startStopCallback)
-        rospy.Subscriber("sensor_state", SensorState, self.sensorCallback) #Subscribe to the sensor state msg
+        rospy.Subscriber("cmd_vel", Twist, self.cmd_vel_callback)
+        rospy.Subscriber("sensor_state", SensorState, self.sensor_callback) #Subscribe to the sensor state msg
 
         #Publisher bank
         self.reset_pub = rospy.Publisher('reset', Empty, queue_size=1)
@@ -29,50 +29,47 @@ class wheelBaselineEstimator():
         self.right_encoder_prev = None
         self.del_left_encoder = 0
         self.del_right_encoder = 0
-        self.isMoving = False #Moving or not moving
+        self.is_moving = False #Moving or not moving
         self.lock = threading.Lock()
 
         #Reset the robot 
         reset_msg = Empty()
         self.reset_pub.publish(reset_msg)
-        print('Ready to start wheel radius calibration!')
-        return
+        rospy.loginfo('Ready to start wheel radius calibration!')
 
-    def safeDelPhi(self, a, b):
+    def safe_del_phi(self, a, b):
         #Need to check if the encoder storage variable has overflowed
-        diff = np.int64(b) - np.int64(a)
-        if diff < -np.int64(INT32_MAX): #Overflowed
-            delPhi = (INT32_MAX - 1 - a) + (INT32_MAX + b) + 1
-        elif diff > np.int64(INT32_MAX) - 1: #Underflowed
-            delPhi = (INT32_MAX + a) + (INT32_MAX - 1 - b) + 1
+        diff = b - a
+        if diff < -INT32_MAX: #Overflowed
+            diff = (INT32_MAX - 1 - a) + (INT32_MAX + b) + 1
+        elif diff > INT32_MAX - 1: #Underflowed
+            diff = (INT32_MAX + a) + (INT32_MAX - 1 - b) + 1
         else:
-            delPhi = b - a  
-        return delPhi
+            diff = b - a  
+        return diff
 
-    def sensorCallback(self, msg):
+    def sensor_callback(self, msg: SensorState):
         #Retrieve the encoder data form the sensor state msg
-        self.lock.acquire()
-        if self.left_encoder_prev is None or self.left_encoder_prev is None: 
-            self.left_encoder_prev = msg.left_encoder #int32
-            self.right_encoder_prev = msg.right_encoder #int32
-        else:
-            #Calculate and integrate the change in encoder value
-            self.del_left_encoder += self.safeDelPhi(self.left_encoder_prev, msg.left_encoder)
-            self.del_right_encoder += self.safeDelPhi(self.right_encoder_prev, msg.right_encoder)
+        with self.lock:
+            if self.left_encoder_prev is None or self.left_encoder_prev is None: 
+                self.left_encoder_prev = msg.left_encoder #int32
+                self.right_encoder_prev = msg.right_encoder #int32
+            else:
+                #Calculate and integrate the change in encoder value
+                self.del_left_encoder += self.safe_del_phi(self.left_encoder_prev, msg.left_encoder)
+                self.del_right_encoder += self.safe_del_phi(self.right_encoder_prev, msg.right_encoder)
 
-            #Store the new encoder values
-            self.left_encoder_prev = msg.left_encoder #int32
-            self.right_encoder_prev = msg.right_encoder #int32
-        self.lock.release()
-        return
+                #Store the new encoder values
+                self.left_encoder_prev = msg.left_encoder #int32
+                self.right_encoder_prev = msg.right_encoder #int32
 
-    def startStopCallback(self, msg):
-        if self.isMoving is False and np.absolute(msg.angular.z) > 0:
-            self.isMoving = True #Set state to moving
-            print('Starting Calibration Procedure')
+    def cmd_vel_callback(self, msg: Twist):
+        if not self.is_moving and np.abs(msg.angular.z) > 0:
+            self.is_moving = True #Set state to moving
+            rospy.loginfo('Starting Calibration Procedure')
 
-        elif self.isMoving is True and np.isclose(msg.angular.z, 0):
-            self.isMoving = False #Set the state to stopped
+        elif self.is_moving and np.isclose(msg.angular.z, 0):
+            self.is_moving = False #Set the state to stopped
 
             # # YOUR CODE HERE!!!
             # Calculate the radius of the wheel based on encoder measurements
@@ -83,26 +80,24 @@ class wheelBaselineEstimator():
             # From encoder, we have distance = encoder_ticks / ticks_per_rotation * (2 * pi * radius)
             # Therefore, diameter = distance / (n * pi) for each wheel which we can combine together 
             # to get separation = (distanceLeft + distanceRight) / (2 * n * pi)
-            distanceLeft = np.abs((self.del_left_encoder / TICKS_PER_ROTATION) * (2 * np.pi * WHEEL_RADIUS))
-            distanceRight = np.abs((self.del_right_encoder / TICKS_PER_ROTATION) * (2 * np.pi * WHEEL_RADIUS))
-            separation = (distanceLeft + distanceRight) / (2 * NUM_ROTATIONS * np.pi)
+            dist_left = np.abs((self.del_left_encoder / TICKS_PER_ROTATION) * (2 * np.pi * WHEEL_RADIUS))
+            dist_right = np.abs((self.del_right_encoder / TICKS_PER_ROTATION) * (2 * np.pi * WHEEL_RADIUS))
+            separation = (dist_left + dist_right) / (2 * NUM_ROTATIONS * np.pi)
 
-            print('Calibrated Separation: {} m'.format(separation))
+            rospy.loginfo(f'Calibrated Separation: {separation} m')
 
             #Reset the robot and calibration routine
-            self.lock.acquire()
-            self.left_encoder_prev = None
-            self.right_encoder_prev = None
-            self.del_left_encoder = 0
-            self.del_right_encoder = 0
-            self.lock.release()
+            with self.lock:
+                self.left_encoder_prev = None
+                self.right_encoder_prev = None
+                self.del_left_encoder = 0
+                self.del_right_encoder = 0
+
             reset_msg = Empty()
             self.reset_pub.publish(reset_msg)
-            print('Resetted the robot to calibrate again!')
-
-        return
+            rospy.loginfo('Resetted the robot to calibrate again!')
 
 
 if __name__ == '__main__':
-    Estimator = wheelBaselineEstimator() #create instance
+    estimator = WheelBaselineEstimator() #create instance
     rospy.spin()
