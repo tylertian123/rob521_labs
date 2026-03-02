@@ -102,14 +102,16 @@ class OccupancyGripMap:
         range_min = scan_msg.range_min
         range_max = scan_msg.range_max
         angle_increment = scan_msg.angle_increment * SCAN_DOWNSAMPLE
+
+        x_start = odom_map[0] / CELL_SIZE
+        y_start = odom_map[1] / CELL_SIZE
+
         # iterate through each measurement and update the map
         for i, r in enumerate(downsampled_ranges):
-            if r > range_max or r < range_min:
+            if r < range_min or r > range_max:
                 # ignore 
                 continue
             # get scan relative to current robot pose
-            x_start = odom_map[0] / CELL_SIZE
-            y_start = odom_map[1] / CELL_SIZE
             angle = odom_map[2] + angle_min + i * angle_increment
             range_mes = r / CELL_SIZE
             # update map
@@ -135,6 +137,36 @@ class OccupancyGripMap:
         # YOUR CODE HERE!!! You should modify the log_odds object and the numpy map based on the outputs from
         # ray_trace and the equations from class. Your numpy map must be an array of int8s with 0 to 100 representing
         # probability of occupancy, and -1 representing unknown.
+
+        x_end = int(x_start + range_mes * np.cos(angle))
+        y_end = int(y_start + range_mes * np.sin(angle))
+
+        rr, cc = ray_trace(int(x_start), int(y_start), x_end, y_end)
+
+        width, height = map.shape
+
+        for i in range(len(rr) - NUM_PTS_OBSTACLE):
+            r = rr[i]
+            c = cc[i]
+            if r < 0 or r >= width or c < 0 or c >= height:
+                continue
+            log_odds[r, c] -= ALPHA
+
+        for i in range(len(rr) - NUM_PTS_OBSTACLE, len(rr)):
+            r = rr[i]
+            c = cc[i]
+            if r < 0 or r >= width or c < 0 or c >= height:
+                continue
+            log_odds[r, c] += BETA
+
+        probs = self.log_odds_to_probability(log_odds)
+
+        occ = (probs * 100).astype(np.int8)
+        occ[probs < 0.01] = 0
+        occ[probs > 0.99] = 100
+
+        map[:] = occ
+        map[log_odds == 0] = -1
 
         return map, log_odds
 
