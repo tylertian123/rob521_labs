@@ -42,7 +42,7 @@ class WheelOdom:
         self.wheel_odom_tf.header.frame_id = 'odom'
         self.wheel_odom_tf.child_frame_id = 'wo_base_link'
         self.pose = Pose()
-        self.pose.orientation.w = 1.0
+        self.pose.orientation.z = 1.0 # Rotation by 180 deg to match loop.bag's initial theta
         self.twist = Twist()
         self.last_enc_l = None
         self.last_enc_r = None
@@ -97,7 +97,7 @@ class WheelOdom:
             d_r = WHEEL_RADIUS * delta_phi_r
 
             d_s = (d_r + d_l) / 2.0
-            d_theta = (d_l - d_r) / (2.0 * BASELINE)
+            d_theta = (d_r - d_l) / (2.0 * BASELINE)
 
             theta = euler_from_ros_quat(self.pose.orientation)[2]
 
