@@ -20,6 +20,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   turtlebot3_bringup
   turtlebot3_msgs
+  turtlebot3_gazebo
   visualization_msgs
 )
 
