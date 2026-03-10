@@ -6,11 +6,22 @@ import numpy as np
 import matplotlib.pyplot as plt
 import rospkg
 
+def safe_read_messages(bag, topics=None):
+    for entry in bag._get_entries():
+        try:
+            topic, msg, t = bag._read_message(entry.position)
+        except Exception as e:
+            continue
+        if topics and topic not in topics:
+            continue
+
+        yield topic, msg, t
+
 def plot(bag):
     data = {"odom_est":{"time":[], "data":[]},
             "odom_onboard":{'time':[], "data":[]}}
     start_time = None
-    for topic, msg, t in bag.read_messages(topics=['odom_est', 'odom_onboard']):
+    for topic, msg, t in safe_read_messages(bag, topics=['odom_est','odom_onboard']):
         if start_time is None:
             start_time = msg.header.stamp.to_sec()
         d = [msg.pose.pose.position.x, msg.pose.pose.position.y,

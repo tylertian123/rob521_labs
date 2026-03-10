@@ -54,7 +54,7 @@ class WheelBaselineEstimator():
     def sensor_callback(self, msg: SensorState):
         #Retrieve the encoder data form the sensor state msg
         with self.lock:
-            if self.left_encoder_prev is None or self.left_encoder_prev is None: 
+            if self.left_encoder_prev is None or self.right_encoder_prev is None: 
                 self.left_encoder_prev = msg.left_encoder #int32
                 self.right_encoder_prev = msg.right_encoder #int32
             else:
