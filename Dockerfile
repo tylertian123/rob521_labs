@@ -49,6 +49,7 @@ RUN rm -rf /tmp/rob521_docker_build
 
 # Setup bashrc and config.fish for the correct environment
 RUN echo "source /home/rob521/rob521_labs/devel/setup.bash" >> /home/rob521/.bashrc \
+    && echo "source /opt/ros/noetic/share/rosbash/rosfish" >> /home/rob521/.config/fish/config.fish
     && echo "bass source /home/rob521/rob521_labs/devel/setup.bash" >> /home/rob521/.config/fish/config.fish
 
 # Switch to correct user
