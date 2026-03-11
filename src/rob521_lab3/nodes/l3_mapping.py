@@ -119,7 +119,7 @@ class OccupancyGripMap:
 
         # publish the message
         self.map_msg.info.map_load_time = rospy.Time.now()
-        self.map_msg.data = self.np_map.flatten()
+        self.map_msg.data = self.np_map.T.ravel()
         self.map_pub.publish(self.map_msg)
 
     def ray_trace_update(self, map, log_odds, x_start, y_start, angle, range_mes):
