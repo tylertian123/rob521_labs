@@ -78,7 +78,7 @@ class OccupancyGripMap:
         # read new laser data and populate map
         # get current odometry robot pose
         try:
-            odom_tf = self.tf_buffer.lookup_transform('odom', 'base_scan', rospy.Time(0)).transform
+            odom_tf = self.tf_buffer.lookup_transform('odom', 'base_scan', scan_msg.header.stamp, rospy.Duration(0.2)).transform
         except tf2_ros.TransformException:
             rospy.logwarn('Pose from odom lookup failed. Using origin as odom.')
             odom_tf = convert_pose_to_tf(self.map_msg.info.origin)
