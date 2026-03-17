@@ -115,14 +115,21 @@ class OccupancyGripMap:
             angle = odom_map[2] + angle_min + i * angle_increment
             range_mes = r / CELL_SIZE
             # update map
-            self.np_map, self.log_odds = self.ray_trace_update(self.np_map, self.log_odds, x_start, y_start, angle, range_mes)
+            self.log_odds = self.ray_trace_update(self.log_odds, x_start, y_start, angle, range_mes)
+
+        probs = self.log_odds_to_probability(self.log_odds)
+
+        self.np_map = (probs * 100).astype(np.int8)
+        self.np_map[probs < 0.01] = 0
+        self.np_map[probs > 0.99] = 100
+        self.np_map[self.log_odds == 0] = -1
 
         # publish the message
         self.map_msg.info.map_load_time = rospy.Time.now()
         self.map_msg.data = self.np_map.T.ravel()
         self.map_pub.publish(self.map_msg)
 
-    def ray_trace_update(self, map, log_odds, x_start, y_start, angle, range_mes):
+    def ray_trace_update(self, log_odds, x_start, y_start, angle, range_mes):
         """
         A ray tracing grid update as described in the lab document.
 
@@ -143,7 +150,7 @@ class OccupancyGripMap:
 
         rr, cc = ray_trace(int(x_start), int(y_start), x_end, y_end)
 
-        width, height = map.shape
+        width, height = log_odds.shape
 
         for i in range(len(rr) - NUM_PTS_OBSTACLE):
             r = rr[i]
@@ -159,16 +166,7 @@ class OccupancyGripMap:
                 continue
             log_odds[r, c] += BETA
 
-        probs = self.log_odds_to_probability(log_odds)
-
-        occ = (probs * 100).astype(np.int8)
-        occ[probs < 0.01] = 0
-        occ[probs > 0.99] = 100
-
-        map[:] = occ
-        map[log_odds == 0] = -1
-
-        return map, log_odds
+        return log_odds
 
     def log_odds_to_probability(self, values):
         # print(values)
