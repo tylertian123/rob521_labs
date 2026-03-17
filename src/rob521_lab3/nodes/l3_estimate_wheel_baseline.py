@@ -10,7 +10,7 @@ from geometry_msgs.msg import Twist
 INT32_MAX = 2**31
 NUM_ROTATIONS = 3 
 TICKS_PER_ROTATION = 4096
-WHEEL_RADIUS = 0.066 / 2 #In meters
+WHEEL_RADIUS = 0.03242307662 #In meters
 
 
 class WheelBaselineEstimator():
@@ -38,7 +38,7 @@ class WheelBaselineEstimator():
         #Reset the robot 
         reset_msg = Empty()
         self.reset_pub.publish(reset_msg)
-        rospy.loginfo('Ready to start wheel radius calibration!')
+        rospy.loginfo('Ready to start wheel baseline calibration!')
 
     def safe_del_phi(self, a, b):
         #Need to check if the encoder storage variable has overflowed
@@ -78,7 +78,7 @@ class WheelBaselineEstimator():
             return
 
         # Must have stopped for more than 3 seconds, to prevent unintentional stopping present in bag
-        if (rospy.Time.now() - self.last_moving_msg).to_sec() > 3.0:
+        if (rospy.Time.now() - self.last_moving_msg).to_sec() > 5.0:
             self.is_moving = False
 
             # # YOUR CODE HERE!!!

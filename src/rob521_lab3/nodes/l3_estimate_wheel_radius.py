@@ -8,7 +8,7 @@ from std_msgs.msg import Empty
 from geometry_msgs.msg import Twist
 
 INT32_MAX = 2**31
-DRIVEN_DISTANCE = 0.75 #in meters
+DRIVEN_DISTANCE = 1.2192 #in meters
 TICKS_PER_ROTATION = 4096
 
 class WheelRadiusEstimator():
@@ -28,6 +28,7 @@ class WheelRadiusEstimator():
         self.del_left_encoder = 0
         self.del_right_encoder = 0
         self.is_moving = False #Moving or not moving
+        self.last_moving_msg = rospy.Time.now()
         self.lock = threading.Lock()
 
         #Reset the robot 
@@ -63,12 +64,19 @@ class WheelRadiusEstimator():
 
     def cmd_vel_callback(self, msg: Twist):
         input_velocity_mag = np.linalg.norm([msg.linear.x, msg.linear.y, msg.linear.z])
-        if not self.is_moving and np.abs(input_velocity_mag) > 0:
-            self.is_moving = True #Set state to moving
-            rospy.loginfo('Starting Calibration Procedure')
+        if input_velocity_mag > 1e-6:
+            self.last_moving_msg = rospy.Time.now()
+            if not self.is_moving:
+                self.is_moving = True
+                rospy.loginfo('Starting Calibration Procedure')
+                return
 
-        elif self.is_moving and np.isclose(input_velocity_mag, 0):
-            self.is_moving = False #Set the state to stopped
+        if not self.is_moving:
+            return
+
+        # Must have stopped for more than 3 seconds, to prevent unintentional stopping present in bag
+        if (rospy.Time.now() - self.last_moving_msg).to_sec() > 1.0:
+            self.is_moving = False
 
             # # YOUR CODE HERE!!!
             # Calculate the radius of the wheel based on encoder measurements

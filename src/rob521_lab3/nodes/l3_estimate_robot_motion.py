@@ -20,8 +20,8 @@ from utils import convert_pose_to_tf, euler_from_ros_quat, ros_quat_from_euler
 
 ENC_TICKS = 4096
 RAD_PER_TICK = 0.001533981
-WHEEL_RADIUS = .066 / 2
-BASELINE = .287 / 2
+WHEEL_RADIUS = 0.032437295390504994
+BASELINE = 0.2912535842666699 / 2
 
 
 class WheelOdom:
@@ -42,7 +42,7 @@ class WheelOdom:
         self.wheel_odom_tf.header.frame_id = 'odom'
         self.wheel_odom_tf.child_frame_id = 'wo_base_link'
         self.pose = Pose()
-        self.pose.orientation.z = 1.0 # Rotation by 180 deg to match loop.bag's initial theta
+        self.pose.orientation.w = 1.0
         self.twist = Twist()
         self.last_enc_l = None
         self.last_enc_r = None
